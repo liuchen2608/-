@@ -2,61 +2,76 @@
 
 import { useRef, useState } from "react";
 
-const nav = [["⌂","健康首页"],["◌","问阿宝"],["▤","报告解读"],["▣","健康档案"],["♧","家庭管理"],["◎","健康目标"],["✚","医疗服务"]];
+const nav = [["⌂","健康首页"],["◌","健康问答"],["▤","图片解读"],["▣","健康档案"],["◎","目标与提醒"],["⌁","设备数据"],["✚","医疗服务"]];
 const members = ["我","妈妈","爸爸"];
 
 export default function Home(){
-  const [active,setActive]=useState("健康首页");
+  const [page,setPage]=useState("健康首页");
   const [member,setMember]=useState("我");
-  const [message,setMessage]=useState("");
-  const [reply,setReply]=useState("这种情况持续多久了？");
-  const [checked,setChecked]=useState(false);
   const [notice,setNotice]=useState("");
   const [privacy,setPrivacy]=useState(false);
-  const file=useRef<HTMLInputElement>(null);
-  const go=(name:string)=>{setActive(name);setNotice("")};
-  const send=()=>{if(!message.trim())return;setReply("我了解了。为了更安全地判断，还想确认：是否伴随明显胸痛、呼吸困难或意识不清？");setMessage("")};
-  return <main className="app-shell">
-    <aside className="sidebar">
-      <button className="brand" onClick={()=>go("健康首页")}><span>大象</span>阿宝</button>
-      <nav aria-label="主要导航">{nav.map(([icon,label])=><button key={label} className={active===label?"active":""} onClick={()=>go(label)}><span className="nav-icon">{icon}</span>{label}</button>)}</nav>
-      <div className="sidebar-bottom"><button onClick={()=>setPrivacy(true)}><span className="nav-icon">♢</span>隐私与授权</button><button onClick={()=>{setPrivacy(true);setNotice("已打开设置中心")}}><span className="nav-icon">⚙</span>设置</button></div>
+  const [history,setHistory]=useState(false);
+  const go=(next:string)=>{setPage(next);setNotice("");window.scrollTo({top:0,behavior:"smooth"})};
+  return <main className="shell">
+    <aside className="side">
+      <button className="brand" onClick={()=>go("健康首页")}><span>大象</span>阿宝<small>AI 健康朋友</small></button>
+      <nav aria-label="产品功能">{nav.map(([icon,label])=><button key={label} className={page===label?"active":""} onClick={()=>go(label)}><i>{icon}</i><span>{label}</span></button>)}</nav>
+      <div className="side-foot"><button onClick={()=>setHistory(true)}><i>⌕</i><span>历史与检索</span></button><button onClick={()=>setPrivacy(true)}><i>◇</i><span>隐私与授权</span></button></div>
     </aside>
-    <section className="workspace">
-      <header className="topbar"><h1>{active}</h1><label className="search"><span>⌕</span><input aria-label="搜索" placeholder="搜索对话、报告或健康记录" /></label><button className="secure" onClick={()=>setPrivacy(true)}>▣ 健康数据已加密</button><button className="icon-btn" aria-label="通知" onClick={()=>setNotice("你有 2 条健康提醒")}>♧<i/></button><button className="avatar" aria-label="用户菜单">👩🏻</button><b>{member}⌄</b></header>
-      {active==="健康首页"?<Dashboard go={go} member={member} setMember={setMember} reply={reply} setReply={setReply} message={message} setMessage={setMessage} send={send} checked={checked} setChecked={setChecked} file={file} setNotice={setNotice}/>:<FeaturePage active={active} member={member} setMember={setMember} message={message} setMessage={setMessage} reply={reply} send={send} checked={checked} setChecked={setChecked} file={file} setNotice={setNotice}/>} 
+    <section className="main">
+      <header className="top"><div><span>当前健康主体</span><button onClick={()=>setMember(member==="我"?"妈妈":"我")}>{member}⌄</button></div><button className="global-search" onClick={()=>setHistory(true)}>⌕　搜索对话、报告与健康记录</button><button className="privacy-badge" onClick={()=>setPrivacy(true)}>▣　健康数据保护</button><button className="user" aria-label="账号菜单">我</button></header>
+      <div className="content"><Panel page={page} go={go} member={member} setMember={setMember} setNotice={setNotice}/></div>
     </section>
-    {notice&&<div className="toast" role="status">✓ {notice}<button onClick={()=>setNotice("")}>×</button></div>}
-    {privacy&&<div className="overlay" onClick={()=>setPrivacy(false)}><section className="modal" onClick={e=>e.stopPropagation()}><button className="modal-x" onClick={()=>setPrivacy(false)}>×</button><span className="modal-icon">🔐</span><h2>你的健康数据，由你掌控</h2><p>大象阿宝仅在你明确授权后使用健康档案。不同家庭成员的数据默认隔离，分享前会再次确认。</p><div className="permission"><span>健康档案个性化</span><b>已授权</b></div><div className="permission"><span>设备健康数据</span><b>已授权</b></div><div className="permission"><span>相册与相机</span><em>使用时询问</em></div><button className="primary" onClick={()=>{setPrivacy(false);setNotice("授权设置已保存")}}>管理授权与数据</button></section></div>}
+    {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
+    {privacy&&<PrivacyModal close={()=>setPrivacy(false)} setNotice={setNotice}/>} 
+    {history&&<HistoryModal close={()=>setHistory(false)} go={go}/>} 
   </main>
 }
 
-function Dashboard({go,member,setMember,reply,setReply,message,setMessage,send,checked,setChecked,file,setNotice}:any){return <>
-  <div className="greeting"><span>☼</span>早上好，今天感觉怎么样？<div className="subject">当前健康主体：<b>{member}</b></div></div>
-  <div className="dashboard-grid">
-    <AskBox reply={reply} setReply={setReply} message={message} setMessage={setMessage} send={send} member={member} file={file} setNotice={setNotice}/>
-    <section className="card health-card"><h2>今日健康</h2><div className="metrics"><div><i>◔</i><span>睡眠<b>7小时12分</b></span></div><div><i>♥</i><span>心率<b>72 <small>次/分</small></b></span></div><div><i>♨</i><span>步数<b>6,340 <small>步</small></b></span></div><div><i>♧</i><span>血压<b>120/78</b></span></div></div><Trend/></section>
-  </div>
-  <div className="quick-actions">{[["▣","拍报告","报告解读"],["▤","查药品","问阿宝"],["♙","找医生","医疗服务"],["▢","预约挂号","医疗服务"]].map(([i,t,p])=><button key={t} onClick={()=>go(p)}><i>{i}</i>{t}</button>)}</div>
-  <div className="lower-grid">
-    <section className="card mini-card"><div className="section-head"><h2>最近报告</h2><button onClick={()=>go("报告解读")}>全部报告 ›</button></div><div className="report-row"><span className="doc-icon">▤</span><div><b>血常规报告 · 8月12日</b><em>2 项需关注</em><small>先确认识别数据是否准确</small></div><button onClick={()=>go("报告解读")}>查看解读</button></div></section>
-    <section className="card mini-card"><div className="section-head"><h2>家庭健康档案</h2><span className="private">▣ 仅你可见</span></div><div className="member-tabs">{members.map((m:string)=><button className={member===m?"selected":""} onClick={()=>setMember(m)} key={m}>{m==="我"?"👩🏻":m==="妈妈"?"👵🏻":"👴🏻"} {m}</button>)}</div><div className="family-summary"><span>💊 用药提醒<br/><b>2 项</b></span><span>📋 体检报告<br/><b>8月12日</b></span><span>♥ 血压趋势<br/><b className="stable">稳定</b></span></div><button className="text-link" onClick={()=>go("健康档案")}>查看全部档案 ›</button></section>
-    <section className="card mini-card"><div className="section-head"><h2>健康小目标</h2><button onClick={()=>go("健康目标")}>管理目标 ›</button></div><div className="goal-row"><span>🚶</span><div><b>每日步行 8,000 步</b><div className="progress"><i style={{width:checked?"100%":"68%"}}/></div><em>{checked?"100%":"68%"}</em></div><button className={checked?"done":""} onClick={()=>{setChecked(!checked);setNotice(checked?"已取消今日打卡":"今日目标打卡成功")}}>{checked?"已打卡":"今日打卡"}</button></div><div className="streak">🌙 改善睡眠 · 连续 6 天　 <b>● ● ● ● ● ●</b> ○</div></section>
-  </div>
-  <section className="service-strip"><div><h2>需要更专业的帮助？</h2><p>连接真人医生与医疗服务，重要操作都由你最终确认</p></div>{[["▣","在线问诊"],["♙","云陪诊"],["⌖","附近医院"]].map(([i,t])=><button key={t} onClick={()=>go("医疗服务")}><i>{i}</i><b>{t}</b></button>)}</section>
-  </>}
+function Panel(props:any){switch(props.page){
+  case "健康问答": return <AskPage {...props}/>;
+  case "图片解读": return <ReportPage {...props}/>;
+  case "健康档案": return <ArchivePage {...props}/>;
+  case "目标与提醒": return <GoalPage {...props}/>;
+  case "设备数据": return <DevicePage {...props}/>;
+  case "医疗服务": return <ServicePage {...props}/>;
+  default:return <HomePage {...props}/>;
+}}
 
-function AskBox({reply,setReply,message,setMessage,send,member,file,setNotice}:any){return <section className="card ask-card"><div className="ask-title"><div className="elephant">🐘</div><div><h2>问问阿宝</h2><p>用文字、语音或图片，说说你的健康问题</p></div></div><div className="chat"><div className="user-bubble">最近总是睡不好</div><div className="bot-row"><span>🐘</span><div className="bot-bubble">{reply}<div className="chips">{["少于1周","1–4周","超过1个月"].map(x=><button key={x} onClick={()=>setReply(`了解，已经持续${x}。入睡困难、夜间易醒和早醒，哪一种最明显？`)}>{x}</button>)}</div></div></div><div className="context-pill">▤ 已参考：{member}的健康档案</div></div><form className="composer" onSubmit={e=>{e.preventDefault();send()}}><textarea value={message} onChange={e=>setMessage(e.target.value)} placeholder="描述症状，或上传报告、药盒图片" aria-label="向阿宝提问"/><div className="composer-actions"><span><button type="button" title="语音输入" onClick={()=>setNotice("语音输入已开启")}>♩</button><button type="button" title="上传图片" onClick={()=>file.current?.click()}>▧</button><input ref={file} type="file" accept="image/*,.pdf" hidden onChange={(e:any)=>e.target.files?.[0]&&setNotice(`已选择：${e.target.files[0].name}`)}/><button type="button" title="添加附件" onClick={()=>file.current?.click()}>♧</button></span><button className="send" type="submit">发送</button></div></form><p className="disclaimer">ⓘ 仅供参考，不能替代医生诊断和治疗建议</p></section>}
+function HomePage({go,member,setMember,setNotice}:any){return <>
+  <section className="hero"><div className="hero-copy"><span className="eyebrow">AI 健康朋友</span><h1>从一个健康问题开始，<br/>持续照顾你和家人</h1><p>用文字、语音或图片描述问题。阿宝会补充询问必要信息，并在需要时连接专业医疗服务。</p><div className="hero-actions"><button className="primary" onClick={()=>go("健康问答")}>开始健康问答</button><button onClick={()=>go("图片解读")}>上传健康资料</button></div><small>AI 输出仅供参考，不能替代专业医生的诊断和治疗建议。</small></div><div className="hero-art" aria-hidden="true"><span className="tag t1">主动追问</span><span className="tag t2">风险分流</span><div>🐘</div><span className="tag t3">档案参考</span></div></section>
+  <SubjectBar member={member} setMember={setMember}/>
+  <section className="section"><div className="section-title"><div><span>核心能力</span><h2>围绕健康管理的完整闭环</h2></div><p>问题理解、行动建议、持续记录与专业服务连接</p></div><div className="feature-grid">{[["◌","健康问答","文字、语音、图片提问与主动追问","健康问答"],["▤","图片与文件解读","质量检查、字段确认、通俗解释","图片解读"],["▣","个人与家庭档案","按人、时间和资料类型管理记录","健康档案"],["◎","目标、计划与提醒","可编辑计划、打卡与提醒控制","目标与提醒"],["⌁","设备数据接入","同步状态、数据来源与质量说明","设备数据"],["✚","医疗服务连接","在线问诊、预约挂号与云陪诊","医疗服务"]].map(([icon,title,desc,target])=><button key={title} onClick={()=>go(target)}><i>{icon}</i><span><b>{title}</b><em>{desc}</em></span><strong>›</strong></button>)}</div></section>
+  <section className="safety"><i>!</i><div><b>医疗安全是所有功能的前提</b><span>疑似急症时停止普通问答，明确建议联系急救或立即线下就医；信息不足时不会输出确定性结论。</span></div><button onClick={()=>setNotice("安全边界：急症优先、说明不确定性、高风险操作需用户确认")}>查看安全边界</button></section>
+</>}
 
-function Trend(){return <><div className="trend-head"><h3>健康趋势</h3><div><b>睡眠</b><span>心率</span><span>步数</span></div></div><div className="chart" aria-label="近七日睡眠趋势图"><div className="ylabels"><span>10小时</span><span>8小时</span><span>6小时</span><span>4小时</span><span>2小时</span></div><div className="chart-area"><div className="gridlines"/><div className="line"><span/><span/><span/><span/><span/><span/><span/></div><div className="dates"><span>5/7</span><span>5/8</span><span>5/9</span><span>5/10</span><span>5/11</span><span>5/12</span><b>5/13</b></div></div></div></>}
+function SubjectBar({member,setMember}:any){return <div className="subject-bar"><span>为谁管理健康</span>{members.map(m=><button key={m} className={member===m?"selected":""} onClick={()=>setMember(m)}>{m}</button>)}<p>不同家庭成员的数据默认隔离，不会混入同一上下文。</p></div>}
 
-function FeaturePage({active,member,setMember,message,setMessage,reply,send,checked,setChecked,file,setNotice}:any){
-  if(active==="问阿宝")return <div className="feature-wrap"><div className="subject-banner">正在为 <b>{member}</b> 咨询 · <button onClick={()=>setMember(member==="我"?"妈妈":"我")}>切换健康主体</button></div><AskBox {...{reply,setReply:()=>{},message,setMessage,send,member,file,setNotice}}/></div>;
-  if(active==="报告解读")return <div className="feature-wrap"><div className="feature-hero"><span>▤</span><h2>让专业报告变得简单易懂</h2><p>支持检查报告、病例、处方和药盒图片。上传前请遮挡无关个人信息。</p></div><button className="upload-zone" onClick={()=>file.current?.click()}><i>＋</i><b>上传或拍摄健康资料</b><span>支持 JPG、PNG、PDF，先识别原始字段，再由你确认</span></button><input ref={file} hidden type="file" accept="image/*,.pdf" onChange={(e:any)=>e.target.files?.[0]&&setNotice(`已安全接收 ${e.target.files[0].name}，正在检查清晰度`)}/><div className="steps"><span><b>1</b> 图片质量检查</span><span><b>2</b> 关键字段确认</span><span><b>3</b> 通俗解释与建议</span></div></div>;
-  if(active==="健康档案")return <div className="feature-wrap"><MemberSelector member={member} setMember={setMember}/><div className="archive-grid"><section className="card profile-card"><span>👩🏻</span><div><h2>{member}的健康档案</h2><p>资料按来源清晰标注，可随时更正与删除</p></div><button onClick={()=>setNotice("档案资料导出已准备")}>导出档案</button></section>{[["8月12日","血常规报告","医疗机构导入"],["8月10日","睡眠问题咨询","用户问答"],["8月08日","平均心率 72 次/分","设备同步"],["8月01日","阿莫西林用药记录","用户输入"]].map(x=><section className="timeline" key={x[1]}><time>{x[0]}</time><i/><div><b>{x[1]}</b><span>{x[2]}</span></div><button>查看 ›</button></section>)}</div></div>;
-  if(active==="家庭管理")return <div className="feature-wrap"><div className="feature-hero"><span>♧</span><h2>照顾家人，也尊重每个人的隐私</h2><p>家庭成员之间默认数据隔离，新增成员与共享资料均需明确授权。</p></div><div className="family-cards">{members.map((m:string)=><section className="card" key={m}><span>{m==="我"?"👩🏻":m==="妈妈"?"👵🏻":"👴🏻"}</span><h3>{m}</h3><p>{m==="我"?"本人 · 完整管理权限":"家人 · 已授权健康管理"}</p><button onClick={()=>{setMember(m);setNotice(`已切换到${m}的健康档案`)}}>查看档案</button></section>)}<button className="add-member" onClick={()=>setNotice("已发起家庭成员授权邀请")}>＋<b>添加家庭成员</b><span>需对方同意或监护授权</span></button></div></div>;
-  if(active==="健康目标")return <div className="feature-wrap"><div className="feature-hero"><span>◎</span><h2>小目标，也值得认真坚持</h2><p>你可以编辑计划、提醒时间和打卡方式，随时暂停。</p></div><section className="goal-detail card"><div className="goal-ring">{checked?"100":"68"}<small>%</small></div><div><h2>每日步行 8,000 步</h2><p>今天已完成 {checked?"8,000":"5,440"} 步 · 还差 {checked?"0":"2,560"} 步</p><div className="week-dots"><b>一</b><b>二</b><b>三</b><b>四</b><b>五</b><b>六</b><em>日</em></div></div><button className="primary" onClick={()=>{setChecked(!checked);setNotice(checked?"已取消今日打卡":"太棒了，今日目标已完成")}}>{checked?"取消打卡":"今日打卡"}</button></section><button className="new-goal" onClick={()=>setNotice("新目标模板已打开")}>＋ 创建新的健康目标</button></div>;
-  return <div className="feature-wrap"><div className="feature-hero"><span>✚</span><h2>找到适合你的专业医疗服务</h2><p>展示提供方、费用和资料共享范围；预约、支付与共享资料前都由你最终确认。</p></div><div className="services">{[["🩺","在线问诊","最快 5 分钟接诊","图文咨询 ¥29 起"],["🤝","云陪诊","就医流程有人陪","服务前确认地区与费用"],["🏥","预约挂号","三甲医院号源查询","跳转前确认就诊人与资料"]].map(x=><section className="card" key={x[1]}><span>{x[0]}</span><h3>{x[1]}</h3><p>{x[2]}</p><small>{x[3]}</small><button className="primary" onClick={()=>setNotice(`已选择${x[1]}，下一步将确认服务与授权`)}>了解服务</button></section>)}</div><div className="safety-note">如出现胸痛、呼吸困难、意识障碍或严重出血等紧急情况，请立即联系当地急救电话或前往急诊。</div></div>
+function PageIntro({kicker,title,desc,icon}:any){return <div className="page-intro"><span>{kicker}</span><h1>{title}</h1><p>{desc}</p><i>{icon}</i></div>}
+
+function AskPage({member,setMember,setNotice}:any){
+  const [text,setText]=useState(""); const [stage,setStage]=useState<"start"|"follow"|"risk">("start");
+  const submit=()=>{if(!text.trim())return;setStage(/胸痛|呼吸困难|昏迷|意识不清|严重出血/.test(text)?"risk":"follow")};
+  return <div className="page"><PageIntro kicker="多模态健康问答" title="把健康问题说给阿宝听" desc="支持文字、语音与图片。必要时会主动追问影响风险判断的关键信息。" icon="◌"/><SubjectBar member={member} setMember={setMember}/><section className="ask-workspace"><div className="chat-area">
+    {stage==="start"&&<div className="empty-chat"><div>🐘</div><h2>现在感觉怎么样？</h2><p>你可以描述症状、生活方式问题，或上传报告与药品图片。</p><div>{["最近睡不好","看懂体检报告","了解药品信息"].map(x=><button onClick={()=>setText(x)} key={x}>{x}</button>)}</div></div>}
+    {stage==="follow"&&<div className="conversation"><div className="mine">{text}</div><div className="abo"><span>🐘</span><div><b>为了更准确地理解，我还想确认：</b><p>这种情况持续多久了？严重程度有没有变化？</p><div className="choice-row"><button>少于 1 周</button><button>1–4 周</button><button>超过 1 个月</button></div><small>已使用：{member}的当前咨询内容。写入长期健康记忆前会再次征得同意。</small></div></div></div>}
+    {stage==="risk"&&<div className="risk-card"><i>!</i><h2>这可能是需要立即处理的高风险情况</h2><p>请立即联系当地急救电话或前往最近的急诊。不要等待 AI 继续分析。</p><button onClick={()=>setNotice("请立即联系当地急救服务或前往急诊")}>查看紧急行动建议</button></div>}
+    <div className="composer"><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="描述健康问题或症状…" aria-label="健康问题"/><div><button onClick={()=>setNotice("语音输入会在使用时请求麦克风授权")}>♩ 语音</button><button onClick={()=>setNotice("图片上传会在使用时请求相册或相机授权")}>▧ 图片</button><button className="primary" onClick={submit}>发送</button></div></div><p className="boundary">仅供参考，不能替代专业医生的诊断和治疗建议</p>
+  </div><aside className="ask-aside"><h3>回答会包含</h3>{[["01","结论摘要"],["02","依据与来源类型"],["03","风险提示"],["04","建议动作"]].map(x=><div key={x[0]}><b>{x[0]}</b><span>{x[1]}</span></div>)}<hr/><p>你可以对回答标记有帮助、无帮助、风险问题或事实错误。</p></aside></section></div>
 }
 
-function MemberSelector({member,setMember}:any){return <div className="member-selector"><span>当前健康主体</span>{members.map(m=><button className={member===m?"selected":""} onClick={()=>setMember(m)} key={m}>{m}</button>)}<i>不同成员的数据不会混用</i></div>}
+function ReportPage({setNotice}:any){const input=useRef<HTMLInputElement>(null);const [file,setFile]=useState("");return <div className="page"><PageIntro kicker="图片与文件解读" title="先确认原始信息，再理解健康资料" desc="适用于检查报告、病例、处方和药盒。识别字段经你确认后才会生成解释。" icon="▤"/><section className="upload-card"><button className="upload" onClick={()=>input.current?.click()}><i>{file?"✓":"＋"}</i><b>{file||"拍摄或上传健康资料"}</b><span>{file?"文件已选择，下一步进行质量检查":"上传前请遮挡与解读无关的个人信息"}</span></button><input ref={input} hidden type="file" accept="image/*,.pdf" onChange={e=>{const f=e.target.files?.[0];if(f){setFile(f.name);setNotice("已选择文件，尚未上传或写入档案")}}}/><div className="flow">{[["1","质量检查","检测模糊、反光、裁切、倒置与缺页"],["2","字段确认","核对原始数值、文字与资料类型"],["3","结构化解读","原文、通俗解释、可能影响、建议动作"]].map(x=><div key={x[0]}><i>{x[0]}</i><b>{x[1]}</b><span>{x[2]}</span></div>)}</div></section><section className="plain-note"><b>识别失败时</b><span>系统会提供重拍规范，并支持重新上传、改用文字或转人工服务。</span></section></div>}
+
+function ArchivePage({member,setMember,setNotice}:any){return <div className="page"><PageIntro kicker="个人与家庭健康档案" title="按人、按时间，留下可追溯的健康脉络" desc="记录问答、报告、用药、设备数据、健康目标与服务记录，并清晰标注数据来源。" icon="▣"/><SubjectBar member={member} setMember={setMember}/><section className="archive-toolbar"><button>⌕ 搜索档案</button><div><button className="selected">全部资料</button><button>问答</button><button>报告</button><button>用药</button><button>设备数据</button></div><button onClick={()=>setNotice("导出前将再次确认档案范围与身份")}>导出档案</button></section><section className="empty-state"><i>▣</i><h2>{member}的健康档案</h2><p>暂无健康资料。通过问答、报告上传、手动记录或设备授权添加第一条记录。</p><div><button className="primary" onClick={()=>setNotice("请选择问答、上传或手动记录入口")}>添加健康记录</button><button onClick={()=>setNotice("家庭成员共享需单独授权")}>管理家庭授权</button></div><small>AI 提取的信息会保留原始材料引用，你可以随时更正或删除。</small></section><DataSources/></div>}
+
+function DataSources(){return <section className="source-grid">{[["用户输入","由你主动记录或确认"],["设备同步","包含设备、时间、单位与质量状态"],["医疗机构导入","保留机构与原始材料来源"],["AI 推断","明确标注，不与原始事实混淆"]].map(x=><div key={x[0]}><i/><b>{x[0]}</b><span>{x[1]}</span></div>)}</section>}
+
+function GoalPage({setNotice}:any){const [created,setCreated]=useState(false);return <div className="page"><PageIntro kicker="健康陪伴" title="把健康目标变成可调整的日常计划" desc="目标说明、周期、行动、打卡和提醒都由你控制，可随时编辑、暂停或关闭。" icon="◎"/>{!created?<section className="empty-state goal-empty"><i>◎</i><h2>建立第一个健康目标</h2><p>可从运动、饮食或睡眠开始。计划会结合已授权信息生成，并允许你逐项修改。</p><div className="goal-types">{["运动","饮食","睡眠"].map(x=><button key={x} onClick={()=>setCreated(true)}>{x}</button>)}</div></section>:<section className="plan-card"><div className="plan-head"><div><span>进行中</span><h2>我的健康目标</h2><p>这是可编辑的阶段计划示例，不涉及疾病治疗或药物调整。</p></div><button onClick={()=>setCreated(false)}>暂停计划</button></div>{[["目标说明","建立更规律的日常健康习惯"],["执行周期","每周检查一次进度"],["每日动作","由你设置具体行动"],["提醒设置","时间、频率和通知渠道可调整"]].map(x=><div className="plan-row" key={x[0]}><b>{x[0]}</b><span>{x[1]}</span><button onClick={()=>setNotice(`${x[0]}可编辑`)}>编辑</button></div>)}<button className="primary checkin" onClick={()=>setNotice("今日打卡已记录，可随时撤销")}>完成今日打卡</button></section>}<section className="plain-note"><b>安全约束</b><span>涉及疾病治疗、药物调整或极端饮食运动的目标，会触发专业审核或就医提示。</span></section></div>}
+
+function DevicePage({setNotice}:any){const [connected,setConnected]=useState(false);return <div className="page"><PageIntro kicker="智能设备数据接入" title="经你授权，汇总连续健康指标" desc="查看授权范围、同步状态与最近同步时间；解绑或重新授权始终由你控制。" icon="⌁"/><section className="device-card"><div className="device-icon">⌁</div><div><h2>{connected?"设备数据已授权":"尚未连接健康设备"}</h2><p>{connected?"等待设备同步数据。每条记录都会包含来源、采集时间、单位和质量状态。":"连接时会逐项说明数据用途和授权范围。支持品牌与指标以真实合作接口为准。"}</p></div><button className={connected?"":"primary"} onClick={()=>{setConnected(!connected);setNotice(connected?"设备已解绑，不再同步新数据":"设备授权范围已确认，可随时撤回")}}>{connected?"解除授权":"连接设备"}</button></section><div className="device-features">{[["同步状态","显示最近同步时间与失败原因"],["数据标准化","处理单位、时区、重复记录与异常值"],["质量说明","标记缺失、延迟、异常和来源设备"],["谨慎解读","不把单次消费级设备读数当作诊断结论"]].map(x=><div key={x[0]}><i>✓</i><b>{x[0]}</b><span>{x[1]}</span></div>)}</div></div>}
+
+function ServicePage({setNotice}:any){return <div className="page"><PageIntro kicker="医疗健康服务连接" title="在 AI 能力之外，连接适当的专业服务" desc="具体服务按地区、机构和账户权限展示；提供方、费用、流程与资料共享范围会在跳转前说明。" icon="✚"/><div className="service-grid">{[["◌","在线问诊","与真人医生进行专业咨询"],["▢","预约挂号","查询并进入可用的挂号路径"],["♙","云陪诊","获取就医流程陪伴服务"]].map(x=><section key={x[1]}><i>{x[0]}</i><h2>{x[1]}</h2><p>{x[2]}</p><ul><li>确认服务提供方</li><li>确认费用与预计流程</li><li>确认资料共享范围</li></ul><button onClick={()=>setNotice(`${x[1]}：可用性需按地区、机构和账户权限确认`)}>查看可用服务</button></section>)}</div><section className="confirm-band"><i>✓</i><div><b>高风险与交易动作必须由你最终确认</b><span>向第三方共享资料、创建预约、购药或支付，AI 都不会静默完成。</span></div></section><section className="emergency"><b>出现疑似急症？</b><span>请立即联系当地急救电话或前往急诊，不要等待在线服务。</span></section></div>}
+
+function PrivacyModal({close,setNotice}:any){return <div className="overlay" onClick={close}><section className="modal" onClick={e=>e.stopPropagation()}><button className="close" onClick={close}>×</button><span className="modal-kicker">设置与隐私</span><h2>健康数据由你控制</h2><p>首次使用健康数据、相册、相机、麦克风、通知、设备数据或定位时，会分别说明用途并请求授权。</p>{[["健康档案","未授权"],["相册与相机","使用时询问"],["麦克风","使用时询问"],["设备数据","未授权"]].map(x=><div className="permission" key={x[0]}><span>{x[0]}</span><b>{x[1]}</b></div>)}<div className="privacy-actions"><button onClick={()=>setNotice("可导出或更正已保存的健康数据")}>导出与更正</button><button onClick={()=>setNotice("删除前会提示对摘要、趋势与上下文的影响")}>删除数据</button><button onClick={()=>setNotice("撤回授权后将停止对应数据使用")}>撤回授权</button></div><button className="primary wide" onClick={close}>完成</button></section></div>}
+
+function HistoryModal({close,go}:any){return <div className="overlay" onClick={close}><section className="modal history" onClick={e=>e.stopPropagation()}><button className="close" onClick={close}>×</button><span className="modal-kicker">对话记忆与检索</span><h2>查找历史健康信息</h2><label><i>⌕</i><input autoFocus placeholder="按关键词搜索"/></label><div className="filters"><button>日期</button><button>健康主体</button><button>资料类型</button></div><div className="history-empty"><i>⌕</i><b>暂无历史记录</b><span>完成问答或添加资料后，可按关键词、日期、健康主体和资料类型检索。</span></div><button className="primary wide" onClick={()=>{close();go("健康问答")}}>开始第一次健康问答</button></section></div>}

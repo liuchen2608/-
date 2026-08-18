@@ -1,4 +1,5 @@
 import { and, desc, eq, like, or } from "drizzle-orm";
+import { env } from "cloudflare:workers";
 import { consents, conversations, deviceConnections, feedback, goalCheckins, goals, healthRecords, healthSubjects, messages, serviceEvents, users } from "../../../db/schema";
 import { apiIdentity, audit, db, id, json, now, unauthorized } from "../_lib";
 
@@ -8,6 +9,46 @@ function triage(text:string){
   if(/胸痛|呼吸困难|昏迷|意识不清|严重出血|抽搐|无法唤醒/.test(text)) return {level:"emergency",reply:"你描述的情况可能需要立即处理。请立即联系当地急救电话或前往最近的急诊，不要等待在线回复。",next:"emergency"};
   if(/孕|婴儿|儿童|老人|高血压|糖尿病|心脏病/.test(text)) return {level:"high_risk",reply:"为了安全起见，这类特殊人群或既往情况需要更谨慎评估。目前信息不足以判断，请尽快联系专业医生，并补充症状持续时间、严重程度、既往史、用药和过敏信息。",next:"professional_care"};
   return {level:"general_consultation",reply:"为了更准确地理解，我还想确认：这种情况持续多久、严重程度有没有变化？是否有既往病史、正在使用的药物或已知过敏？",next:"followup"};
+}
+
+const DEEPSEEK_ENDPOINT="https://api.deepseek.com/chat/completions";
+const DEEPSEEK_SYSTEM_PROMPT=`你是“大象阿宝”，一个谨慎、温和的中文健康信息助手。
+你的职责是帮助用户整理症状、理解常见健康知识并准备就医信息，不做诊断，不替代医生。
+要求：
+1. 使用简洁、易懂的中文，先回应用户最关心的问题，再提出最多 3 个必要的追问。
+2. 不编造检查结果、药物剂量、引用或数据来源；没有把握时明确说明不确定性。
+3. 不建议用户自行停药、换药或调整处方药剂量。
+4. 涉及儿童、孕产妇、老人、慢病、严重或持续加重症状时，提醒尽快咨询专业医生。
+5. 如果对话中出现胸痛、呼吸困难、昏迷、意识不清、严重出血、抽搐或无法唤醒，立即建议联系当地急救电话或前往急诊。
+6. 不复述不必要的敏感个人信息。结尾保留“仅供健康信息参考，不能替代专业医生诊断”。`;
+
+type ChatMessage={role:"system"|"user"|"assistant";content:string};
+type ModelAnswer={reply:string;modelVersion:string;provider:"deepseek"|"rules_fallback";error?:string};
+
+function deepseekConfig(){
+  const runtime=env as unknown as Record<string,unknown>;
+  return {
+    apiKey:typeof runtime.DEEPSEEK_API_KEY==="string"?runtime.DEEPSEEK_API_KEY:"",
+    model:typeof runtime.DEEPSEEK_MODEL==="string"&&runtime.DEEPSEEK_MODEL?runtime.DEEPSEEK_MODEL:"deepseek-v4-pro",
+  };
+}
+
+async function answerWithDeepSeek(history:ChatMessage[],fallback:string,riskLevel:string):Promise<ModelAnswer>{
+  const {apiKey,model}=deepseekConfig();
+  if(!apiKey)return {reply:fallback,modelVersion:"rules-fallback-v1",provider:"rules_fallback",error:"missing_api_key"};
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),18000);
+  try{
+    const response=await fetch(DEEPSEEK_ENDPOINT,{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model,messages:[{role:"system",content:`${DEEPSEEK_SYSTEM_PROMPT}\n当前服务端风险分级：${riskLevel}。不得降低该风险等级。`},...history],temperature:0.3,max_tokens:700,stream:false}),signal:controller.signal});
+    if(!response.ok)throw new Error(`deepseek_http_${response.status}`);
+    const payload=await response.json() as {choices?:Array<{message?:{content?:string}}>};
+    const reply=payload.choices?.[0]?.message?.content?.trim();
+    if(!reply)throw new Error("deepseek_empty_response");
+    const safeReply=riskLevel==="high_risk"&&!/专业医生|就医|医疗机构/.test(reply)?`${reply}\n\n由于涉及特殊人群或慢性病情况，建议尽快咨询专业医生。`:reply;
+    return {reply:safeReply,modelVersion:model,provider:"deepseek"};
+  }catch(error){
+    const reason=error instanceof Error?error.message:"deepseek_unknown_error";
+    return {reply:fallback,modelVersion:"rules-fallback-v1",provider:"rules_fallback",error:reason.slice(0,80)};
+  }finally{clearTimeout(timeout);}
 }
 
 export async function GET(request:Request){
@@ -26,7 +67,11 @@ export async function POST(request:Request){
   if(action==="create_conversation"){if(!await ownedSubject(identity.userId,String(body.subjectId)))return Response.json({error:"invalid_subject"},{status:403});const conversationId=id("conversation");await database.insert(conversations).values({id:conversationId,ownerUserId:identity.userId,subjectId:String(body.subjectId),title:String(body.title||"新的健康对话")});await audit(identity.userId,"conversation_created","conversation",conversationId,String(body.subjectId));return Response.json({id:conversationId},{status:201});}
   if(action==="send_message"){
     const conversation=await ownedConversation(identity.userId,String(body.conversationId));if(!conversation)return Response.json({error:"not_found"},{status:404});const content=String(body.content??"").trim();if(!content)return Response.json({error:"content_required"},{status:400});
-    const userMessageId=id("message");await database.insert(messages).values({id:userMessageId,conversationId:conversation.id,role:"user",content,inputType:String(body.inputType||"text"),contextJson:json({subjectId:conversation.subjectId})});const result=triage(content);const assistantMessageId=id("message");await database.insert(messages).values({id:assistantMessageId,conversationId:conversation.id,role:"assistant",content:result.reply,riskLevel:result.level,modelVersion:"rules-fallback-v1",sourcesJson:"[]",contextJson:json({subjectId:conversation.subjectId,next:result.next})});await database.update(conversations).set({title:content.slice(0,30),summary:content.slice(0,120),riskLevel:result.level,updatedAt:now()}).where(eq(conversations.id,conversation.id));await audit(identity.userId,"message_processed","conversation",conversation.id,conversation.subjectId,{riskLevel:result.level,inputType:body.inputType||"text"},"rules-fallback-v1");return Response.json({userMessage:{id:userMessageId,role:"user",content},assistantMessage:{id:assistantMessageId,role:"assistant",content:result.reply,riskLevel:result.level,modelVersion:"rules-fallback-v1",sources:[]}});
+    const userMessageId=id("message");await database.insert(messages).values({id:userMessageId,conversationId:conversation.id,role:"user",content,inputType:String(body.inputType||"text"),contextJson:json({subjectId:conversation.subjectId})});const result=triage(content);
+    const recentRows=await database.select({role:messages.role,content:messages.content}).from(messages).where(eq(messages.conversationId,conversation.id)).orderBy(desc(messages.createdAt)).limit(12);
+    const history=recentRows.reverse().filter(row=>row.role==="user"||row.role==="assistant").map(row=>({role:row.role as "user"|"assistant",content:row.content}));
+    const modelAnswer=result.level==="emergency"?{reply:result.reply,modelVersion:"rules-emergency-v1",provider:"rules_fallback" as const}:await answerWithDeepSeek(history,result.reply,result.level);
+    const assistantMessageId=id("message");await database.insert(messages).values({id:assistantMessageId,conversationId:conversation.id,role:"assistant",content:modelAnswer.reply,riskLevel:result.level,modelVersion:modelAnswer.modelVersion,sourcesJson:"[]",contextJson:json({subjectId:conversation.subjectId,next:result.next,provider:modelAnswer.provider})});await database.update(conversations).set({title:content.slice(0,30),summary:content.slice(0,120),riskLevel:result.level,updatedAt:now()}).where(eq(conversations.id,conversation.id));await audit(identity.userId,"message_processed","conversation",conversation.id,conversation.subjectId,{riskLevel:result.level,inputType:body.inputType||"text",provider:modelAnswer.provider,providerError:modelAnswer.error??null},modelAnswer.modelVersion);return Response.json({userMessage:{id:userMessageId,role:"user",content},assistantMessage:{id:assistantMessageId,role:"assistant",content:modelAnswer.reply,riskLevel:result.level,modelVersion:modelAnswer.modelVersion,sources:[],provider:modelAnswer.provider}});
   }
   if(action==="feedback"){const feedbackId=id("feedback");await database.insert(feedback).values({id:feedbackId,ownerUserId:identity.userId,messageId:String(body.messageId),type:String(body.type),details:body.details?String(body.details):null});await audit(identity.userId,"answer_feedback","message",String(body.messageId),null,{type:body.type});return Response.json({id:feedbackId},{status:201});}
   if(action==="create_record"){if(!await ownedSubject(identity.userId,String(body.subjectId)))return Response.json({error:"invalid_subject"},{status:403});const recordId=id("record");await database.insert(healthRecords).values({id:recordId,ownerUserId:identity.userId,subjectId:String(body.subjectId),type:String(body.type||"note"),title:String(body.title||"健康记录"),valueJson:json(body.value),sourceType:String(body.sourceType||"user_input"),sourceRef:body.sourceRef?String(body.sourceRef):null,qualityStatus:String(body.qualityStatus||"user_confirmed"),occurredAt:String(body.occurredAt||now())});await audit(identity.userId,"record_created","health_record",recordId,String(body.subjectId),{type:body.type,sourceType:body.sourceType});return Response.json({id:recordId},{status:201});}

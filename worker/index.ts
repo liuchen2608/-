@@ -6,6 +6,8 @@ interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   FILES: R2Bucket;
+  DEEPSEEK_API_KEY?: string;
+  DEEPSEEK_MODEL?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {

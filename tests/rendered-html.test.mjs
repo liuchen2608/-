@@ -21,5 +21,5 @@ test("declares required health data and audit tables",async()=>{
 
 test("keeps medical safety boundaries visible in source",async()=>{
   const page=await readFile(new URL("../app/page.tsx",import.meta.url),"utf8");const api=await readFile(new URL("../app/api/product/route.ts",import.meta.url),"utf8");
-  assert.match(page,/仅供.*不能替代专业医生/);assert.match(api,/emergency/);assert.match(api,/rules-fallback-v1/);assert.match(api,/rules-emergency-v1/);assert.match(api,/DEEPSEEK_API_KEY/);assert.match(api,/https:\/\/api\.deepseek\.com\/chat\/completions/);assert.match(api,/explicit_confirmation_required/);
+  assert.match(page,/仅供.*不能替代专业医生/);assert.match(page,/DeepSeek 对话处理/);assert.match(api,/external_ai_processing/);assert.match(api,/emergency/);assert.match(api,/rules-fallback-v1/);assert.match(api,/rules-emergency-v1/);assert.match(api,/DEEPSEEK_API_KEY/);assert.match(api,/https:\/\/api\.deepseek\.com\/chat\/completions/);assert.match(api,/explicit_confirmation_required/);
 });

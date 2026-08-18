@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const nav = [["⌂","健康首页"],["◌","健康问答"],["▤","图片解读"],["▣","健康档案"],["◎","目标与提醒"],["⌁","设备数据"],["✚","医疗服务"]];
+const nav = [["＋","新对话","健康问答"],["▤","图片解读","图片解读"],["▣","健康档案","健康档案"],["◎","目标与提醒","目标与提醒"],["⌁","设备数据","设备数据"],["✚","医疗服务","医疗服务"]];
 const members = ["我"];
 const action = async (payload:Record<string,unknown>) => {
   const response=await fetch("/api/product",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
@@ -10,7 +10,8 @@ const action = async (payload:Record<string,unknown>) => {
 };
 
 export default function Home(){
-  const [page,setPage]=useState("健康首页");
+  const [page,setPage]=useState("健康问答");
+  const [sideCollapsed,setSideCollapsed]=useState(false);
   const [member,setMember]=useState("我");
   const [notice,setNotice]=useState("");
   const [privacy,setPrivacy]=useState(false);
@@ -19,21 +20,22 @@ export default function Home(){
   const [conversation,setConversation]=useState<any>(null);
   const [conversationId,setConversationId]=useState("");
   const load=async()=>{try{const response=await fetch("/api/bootstrap");if(response.ok){const data=await response.json();setBootstrap(data);if(data.subjects?.[0])setMember(data.subjects[0].name)}}catch{}};
-  useEffect(()=>{load()},[]);
+  useEffect(()=>{load();const stored=localStorage.getItem("abao-sidebar-collapsed");setSideCollapsed(stored===null?window.innerWidth<760:stored==="true")},[]);
   const subjectId=bootstrap?.subjects?.find((s:any)=>s.name===member)?.id??(member==="我"?bootstrap?.subjects?.[0]?.id:"")??"";
   const go=(next:string)=>{setPage(next);setNotice("");window.scrollTo({top:0,behavior:"smooth"})};
+  const toggleSide=()=>setSideCollapsed(value=>{const next=!value;localStorage.setItem("abao-sidebar-collapsed",String(next));return next});
+  const newConversation=()=>{setConversation(null);setConversationId("");go("健康问答")};
   const openConversation=async(id:string)=>{try{const response=await fetch(`/api/product?resource=messages&conversationId=${encodeURIComponent(id)}`);const data=await response.json();if(!response.ok)throw new Error();setConversationId(id);setConversation({items:data.messages});setHistory(false);go("健康问答")}catch{setNotice("历史对话暂时无法读取")}};
   const begin=async(text:string)=>{try{if(!subjectId)throw new Error("profile_unavailable");const latestAiConsent=[...(bootstrap?.consents??[])].reverse().find((c:any)=>c.subjectId===subjectId&&c.scope==="external_ai_processing");if(latestAiConsent?.status!=="granted"){const confirmed=window.confirm("为生成智能回答，大象阿宝会把本轮输入和必要的最近对话发送给 DeepSeek API 处理。请勿输入与健康问题无关的身份信息。你可以随时在隐私设置中撤回授权。是否同意？");if(!confirmed){setNotice("未授权第三方 AI 处理，本次不会发送健康内容");return}await action({action:"set_consent",subjectId,scope:"external_ai_processing",purpose:"将必要的健康对话发送给 DeepSeek API 生成回答",status:"granted"});await load()}const created=await action({action:"create_conversation",subjectId,title:text.slice(0,30)});const result=await action({action:"send_message",conversationId:created.id,content:text,inputType:"text"});setConversationId(created.id);setConversation(result);await load()}catch{setConversation({userMessage:{role:"user",content:text},assistantMessage:{role:"assistant",content:"为了更准确地理解，我还想确认：这种情况持续多久、严重程度有没有变化？",riskLevel:"general_consultation",modelVersion:"local-fallback"}})}go("健康问答")};
-  if(page==="健康首页") return <AgentHome member={member} setMember={setMember} subjects={bootstrap?.subjects} go={go} onStart={begin} openConversation={openConversation} subjectId={subjectId} reload={load} setPrivacy={setPrivacy} setHistory={setHistory} notice={notice} setNotice={setNotice} privacy={privacy} history={history}/>;
-  return <main className="shell">
+  return <main className={`shell app-shell ${sideCollapsed?"side-collapsed":""}`}>
     <aside className="side">
-      <button className="brand" onClick={()=>go("健康首页")}><span>大象</span>阿宝<small>AI 健康朋友</small></button>
-      <nav aria-label="产品功能">{nav.map(([icon,label])=><button key={label} className={page===label?"active":""} onClick={()=>go(label)}><i>{icon}</i><span>{label}</span></button>)}</nav>
+      <div className="side-head"><button className="brand" onClick={newConversation} title="大象阿宝"><span className="brand-elephant">🐘</span><span className="brand-name">大象阿宝<small>AI 健康朋友</small></span></button><button className="side-toggle" onClick={toggleSide} aria-label={sideCollapsed?"展开侧栏":"收起侧栏"} title={sideCollapsed?"展开侧栏":"收起侧栏"}>{sideCollapsed?"›":"‹"}</button></div>
+      <nav aria-label="产品功能">{nav.map(([icon,label,target])=><button key={label} title={label} className={page===target?"active":""} onClick={()=>target==="健康问答"?newConversation():go(target)}><i>{icon}</i><span>{label}</span></button>)}</nav>
       <div className="side-foot"><button onClick={()=>setHistory(true)}><i>⌕</i><span>历史与检索</span></button><button onClick={()=>setPrivacy(true)}><i>◇</i><span>隐私与授权</span></button></div>
     </aside>
     <section className="main">
-      <header className="top"><div><span>当前健康主体</span><button onClick={()=>setMember(member==="我"?"妈妈":"我")}>{member}⌄</button></div><button className="global-search" onClick={()=>setHistory(true)}>⌕　搜索对话、报告与健康记录</button><button className="privacy-badge" onClick={()=>setPrivacy(true)}>▣　健康数据保护</button><button className="user" aria-label="账号菜单">我</button></header>
-      <div className="content"><Panel page={page} go={go} member={member} setMember={setMember} setNotice={setNotice} subjectId={subjectId} bootstrap={bootstrap} conversation={conversation} conversationId={conversationId} reload={load}/></div>
+      <header className="top chatgpt-top"><button className="mobile-side-toggle" onClick={toggleSide} aria-label="切换侧栏">☰</button><button className="model-title" onClick={newConversation}>大象阿宝 <span>健康助手</span></button><div className="top-actions"><button className="subject-switch" onClick={()=>{const names=(bootstrap?.subjects??[]).filter((s:any)=>s.authorizationStatus==="active").map((s:any)=>s.name);if(names.length>1)setMember(names[(names.indexOf(member)+1)%names.length]);else setNotice("请先在健康档案中创建并授权家庭成员")}}>为 {member} 咨询⌄</button><button className="top-icon" onClick={()=>setHistory(true)} aria-label="搜索历史">⌕</button><button className="user" onClick={()=>setPrivacy(true)} aria-label="隐私与账号">我</button></div></header>
+      <div className={`content ${page==="健康问答"?"chat-content":""}`}><Panel page={page} go={go} member={member} setMember={setMember} setNotice={setNotice} subjectId={subjectId} bootstrap={bootstrap} conversation={conversation} conversationId={conversationId} reload={load} onStart={begin}/></div>
     </section>
     {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
     {privacy&&<PrivacyModal close={()=>setPrivacy(false)} setNotice={setNotice} subjectId={subjectId} reload={load}/>} 
@@ -75,16 +77,15 @@ function SubjectBar({member,setMember,subjects}:any){const names=subjects?.lengt
 
 function PageIntro({kicker,title,desc,icon}:any){return <div className="page-intro"><span>{kicker}</span><h1>{title}</h1><p>{desc}</p><i>{icon}</i></div>}
 
-function AskPage({member,setMember,setNotice,conversation,conversationId,bootstrap}:any){
+function AskPage({member,setNotice,conversation,conversationId,onStart}:any){
   const [text,setText]=useState("");const [items,setItems]=useState<any[]>([]);const [sending,setSending]=useState(false);
   useEffect(()=>{if(conversation)setItems(conversation.items??[conversation.userMessage,conversation.assistantMessage].filter(Boolean))},[conversation]);
-  const submit=async()=>{const content=text.trim();if(!content||sending)return;setSending(true);setText("");try{if(conversationId){const result=await action({action:"send_message",conversationId,content,inputType:"text"});setItems(v=>[...v,result.userMessage,result.assistantMessage])}else{setItems(v=>[...v,{role:"user",content},{role:"assistant",content:"目前没有可写入的会话，请从首页开始新的健康问答。",riskLevel:"health_management"}])}}catch{setNotice("会话暂时不可用，请稍后重试")}finally{setSending(false)}};
+  const submit=async(value?:string)=>{const content=(value??text).trim();if(!content||sending)return;setSending(true);setText("");try{if(conversationId){const result=await action({action:"send_message",conversationId,content,inputType:"text"});setItems(v=>[...v,result.userMessage,result.assistantMessage])}else await onStart(content)}catch{setNotice("会话暂时不可用，请稍后重试")}finally{setSending(false)}};
   const rate=async(messageId:string,type:string)=>{try{if(messageId)await action({action:"feedback",messageId,type});setNotice("感谢反馈，已用于质量与安全改进")}catch{setNotice("反馈暂未保存")}};
-  return <div className="page"><PageIntro kicker="健康问答" title="与阿宝继续对话" desc="每轮优先补充影响风险判断的信息；高风险信号会立即停止普通问答。" icon="◌"/><SubjectBar member={member} setMember={setMember} subjects={bootstrap?.subjects}/><section className="ask-workspace"><div className="chat-area">
-    {!items.length&&<div className="empty-chat"><div>🐘</div><h2>开始新的健康对话</h2><p>请从首页输入问题，或在下方直接描述当前情况。</p></div>}
+  return <div className="chat-page"><div className="chat-scroll">
+    {!items.length&&<section className="chat-welcome"><div className="welcome-mark">🐘</div><h1>你好，我是阿宝</h1><p>你的 AI 健康朋友。今天想聊些什么？</p><div className="starter-grid">{[["最近总是睡不好","一起梳理睡眠时间与影响因素"],["帮我看懂体检报告","上传资料前会先征求授权"],["最近经常感到头痛","先了解持续时间与伴随症状"],["想建立健康目标","从睡眠、运动或饮食开始"]].map(([title,desc])=><button key={title} onClick={()=>submit(title)}><b>{title}</b><span>{desc}</span></button>)}</div></section>}
     {!!items.length&&<div className="conversation">{items.map((m:any,i:number)=>m.role==="user"?<div className="mine" key={m.id||i}>{m.content}</div>:m.riskLevel==="emergency"?<div className="risk-card" key={m.id||i}><i>!</i><h2>需要立即处理的高风险情况</h2><p>{m.content}</p><button onClick={()=>setNotice("请立即联系当地急救服务或前往急诊")}>紧急行动建议</button></div>:<div className="abo" key={m.id||i}><span>🐘</span><div><b>{m.riskLevel==="high_risk"?"需要更谨慎评估":"还需要补充信息"}</b><p>{m.content}</p><div className="choice-row"><button onClick={()=>setText("少于 1 周")}>少于 1 周</button><button onClick={()=>setText("1–4 周")}>1–4 周</button><button onClick={()=>setText("超过 1 个月")}>超过 1 个月</button></div><small>上下文：{member}的当前对话 · {m.modelVersion||"规则降级模式"} · 暂无外部医学来源</small>{m.id&&<div className="feedback-row"><button onClick={()=>rate(m.id,"helpful")}>有帮助</button><button onClick={()=>rate(m.id,"not_helpful")}>无帮助</button><button onClick={()=>rate(m.id,"safety_issue")}>安全问题</button><button onClick={()=>rate(m.id,"factual_error")}>事实错误</button></div>}</div></div>)}</div>}
-    <div className="composer"><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}} placeholder="补充症状、持续时间、严重程度、既往史、用药或过敏情况…" aria-label="健康问题"/><div><button onClick={()=>setNotice("语音输入需要麦克风授权和语音服务配置")}>♩ 语音</button><button onClick={()=>setNotice("请前往图片解读上传资料")}>▧ 图片</button><button className="primary" onClick={submit}>{sending?"发送中":"发送"}</button></div></div><p className="boundary">仅供参考，不能替代专业医生的诊断和治疗建议</p>
-  </div><aside className="ask-aside"><h3>安全与透明</h3>{[["01","当前健康主体"],["02","风险级别"],["03","上下文来源"],["04","模型或降级版本"]].map(x=><div key={x[0]}><b>{x[0]}</b><span>{x[1]}</span></div>)}<hr/><p>已接入 DeepSeek 通用模型，仅在明确授权后发送必要对话。它不是医疗专用模型，也未接入权威医学知识库；紧急风险由服务端规则优先拦截。</p></aside></section></div>
+  </div><div className="chat-dock"><div className="composer unified-composer"><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}} placeholder="描述健康问题、症状，或上传健康资料" aria-label="向阿宝提问"/><div><button onClick={()=>setNotice("图片上传前会请求相册或文件授权")}>＋</button><button onClick={()=>setNotice("语音输入需要麦克风授权和语音服务配置")}>♩</button><span className="composer-spacer"/><button className="send-round" onClick={()=>submit()} disabled={sending||!text.trim()} aria-label="发送">{sending?"…":"↑"}</button></div></div><p className="boundary">内容仅供健康信息参考，不能替代专业医生诊断；紧急情况请立即联系急救或前往急诊。</p></div></div>
 }
 
 function ReportPage({setNotice,subjectId}:any){const input=useRef<HTMLInputElement>(null);const [fileName,setFileName]=useState("");const [status,setStatus]=useState("等待上传");const upload=async(file:File)=>{if(!subjectId){setNotice("请先完成健康主体初始化");return}setFileName(file.name);setStatus("请求处理授权");try{await action({action:"set_consent",subjectId,scope:"media_processing",purpose:"对健康资料进行质量检查、字段提取与解释",status:"granted"});const form=new FormData();form.append("file",file);form.append("subjectId",subjectId);setStatus("安全上传中");const response=await fetch("/api/uploads",{method:"POST",body:form});const data=await response.json();if(!response.ok)throw new Error(data.error);setStatus(data.processingAvailable?"正在检查质量":"已保存，等待质量检测服务");setNotice("资料已加密保存；尚未接入 OCR，不会生成未经验证的解读")}catch{setStatus("上传失败，可重试");setNotice("资料未能保存，请检查授权或稍后重试")}};return <div className="page"><PageIntro kicker="图片与文件解读" title="先确认原始信息，再理解健康资料" desc="适用于检查报告、病例、处方和药盒。识别字段经你确认后才会生成解释。" icon="▤"/><section className="upload-card"><button className="upload" onClick={()=>input.current?.click()}><i>{fileName?"✓":"＋"}</i><b>{fileName||"拍摄或上传健康资料"}</b><span>{fileName?status:"上传前请遮挡与解读无关的个人信息；当前单个文件上限 10MB"}</span></button><input ref={input} hidden type="file" accept="image/*,.pdf" onChange={e=>{const f=e.target.files?.[0];if(f)upload(f)}}/><div className="flow">{[["1","安全上传","文件字节保存于对象存储，元数据归属当前健康主体"],["2","质量与 OCR","服务未配置时保持等待状态，不生成结果"],["3","字段确认后解读","必须由用户确认原文、数值和单位后继续"]].map(x=><div key={x[0]}><i>{x[0]}</i><b>{x[1]}</b><span>{x[2]}</span></div>)}</div></section><section className="plain-note"><b>失败降级</b><span>格式不支持、文件过大或识别服务不可用时，不输出确定结论，并提供重传或人工路径。</span></section></div>}

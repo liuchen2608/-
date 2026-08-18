@@ -10,7 +10,7 @@ async function render(){
 
 test("renders the clean agent-first homepage",async()=>{
   const response=await render();assert.equal(response.status,200);const html=await response.text();
-  assert.match(html,/<title>大象阿宝/);assert.match(html,/你好，我是阿宝/);assert.match(html,/今天想聊些什么/);assert.match(html,/描述健康问题、症状，或上传健康资料/);assert.match(html,/不能替代专业医生/);assert.doesNotMatch(html,/今日健康|6,340|120\/78|Your site is taking shape/);
+  assert.match(html,/<title>大象阿宝/);assert.match(html,/你好，我是阿宝/);assert.match(html,/今天想聊些什么/);assert.match(html,/描述健康问题、症状，或上传健康资料/);assert.match(html,/收起侧栏/);assert.match(html,/新对话/);assert.match(html,/不能替代专业医生/);assert.doesNotMatch(html,/今日健康|6,340|120\/78|Your site is taking shape/);
 });
 
 test("declares required health data and audit tables",async()=>{

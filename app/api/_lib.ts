@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../chatgpt-auth";
 import { getDb } from "../../db";
 import { auditEvents } from "../../db/schema";
@@ -13,7 +12,6 @@ export async function apiIdentity(request: Request) {
 
 export function unauthorized(){ return Response.json({error:"authentication_required"},{status:401}); }
 export function db(){ return getDb(); }
-export function files(){ if(!env.FILES) throw new Error("R2 binding `FILES` is unavailable"); return env.FILES; }
 export const id = (prefix:string)=>`${prefix}_${crypto.randomUUID()}`;
 export const now = ()=>new Date().toISOString();
 export const json = (value:unknown)=>JSON.stringify(value ?? {});

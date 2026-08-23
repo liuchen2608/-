@@ -1,0 +1,97 @@
+/* Calm, state-driven motion for the lifestyle assistant. */
+.logo-mark {
+  background-color: #28634d;
+  background-image: url('/abao-elephant-avatar.webp');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 140%;
+  color: transparent;
+  overflow: hidden;
+  box-shadow: 0 5px 14px rgba(34, 88, 66, .16);
+}
+
+.content > .chat-page,
+.content > .page { animation: page-enter 280ms cubic-bezier(.22, 1, .36, 1) both; }
+.welcome-mark { animation: welcome-enter 380ms cubic-bezier(.22, 1, .36, 1) both; }
+.welcome > .eyebrow { animation: welcome-enter 360ms 70ms cubic-bezier(.22, 1, .36, 1) both; }
+.welcome > h1 { animation: welcome-enter 360ms 120ms cubic-bezier(.22, 1, .36, 1) both; }
+.welcome > p { animation: welcome-enter 360ms 170ms cubic-bezier(.22, 1, .36, 1) both; }
+.scope-note { animation: welcome-enter 320ms 460ms cubic-bezier(.22, 1, .36, 1) both; }
+
+.prompt-grid button {
+  animation: card-enter 340ms cubic-bezier(.22, 1, .36, 1) both;
+  transition: transform 180ms cubic-bezier(.22, 1, .36, 1), border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+.prompt-grid button:nth-child(1) { animation-delay: 220ms; }
+.prompt-grid button:nth-child(2) { animation-delay: 280ms; }
+.prompt-grid button:nth-child(3) { animation-delay: 340ms; }
+.prompt-grid button:nth-child(4) { animation-delay: 400ms; }
+.prompt-grid button:hover { transform: translateY(-2px); border-color: #9bbcac; box-shadow: 0 10px 24px rgba(35, 71, 52, .09); }
+.prompt-grid button strong { transition: transform 180ms ease; }
+.prompt-grid button:hover strong { transform: translateX(3px); }
+
+button { transition: transform 160ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
+button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.user-message { animation: user-message-enter 220ms cubic-bezier(.22, 1, .36, 1) both; }
+.assistant-message { animation: assistant-message-enter 300ms cubic-bezier(.22, 1, .36, 1) both; }
+.assistant-message > div > .category { animation: advice-line-enter 260ms 50ms ease both; }
+.assistant-message > div > p { animation: advice-line-enter 300ms 110ms ease both; }
+.assistant-message .feedback-row { animation: advice-line-enter 280ms 180ms ease both; }
+
+.thinking-card {
+  width: min(760px, 100%);
+  margin: 14px auto 0;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 9px 26px rgba(35, 71, 52, .07);
+  animation: assistant-message-enter 260ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.thinking-card .logo-mark { width: 42px; height: 42px; border-radius: 13px; }
+.thinking-card > span { display: flex; flex-direction: column; gap: 3px; }
+.thinking-card b { font-size: 14px; }
+.thinking-card small { color: var(--muted); }
+.thinking-dots { display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.thinking-dots > i { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: thinking-dot 1.05s ease-in-out infinite; }
+.thinking-dots > i:nth-child(2) { animation-delay: 140ms; }
+.thinking-dots > i:nth-child(3) { animation-delay: 280ms; }
+
+.overlay { animation: overlay-enter 180ms ease-out both; }
+.modal { animation: modal-enter 230ms cubic-bezier(.22, 1, .36, 1) both; }
+.toast { animation: toast-enter 260ms cubic-bezier(.22, 1, .36, 1) both; }
+.primary-button.is-success { background: #32775c; box-shadow: 0 0 0 4px rgba(50, 119, 92, .12); }
+.primary-button.is-success::before { content: '✓'; display: inline-block; margin-right: 7px; animation: check-pop 360ms cubic-bezier(.22, 1, .36, 1); }
+.goal-card { transition: background-color 300ms ease, border-color 300ms ease, box-shadow 300ms ease; }
+.goal-card button.is-complete { background: #e6f3eb; border-color: #8eb7a3; color: #28634d; box-shadow: 0 0 0 4px rgba(50, 119, 92, .09); }
+.goal-card button.is-complete .icon { animation: check-pop 420ms cubic-bezier(.22, 1, .36, 1); }
+
+@keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes welcome-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes card-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes user-message-enter { from { opacity: 0; transform: translate(8px, 6px); } to { opacity: 1; transform: none; } }
+@keyframes assistant-message-enter { from { opacity: 0; transform: translate(-8px, 8px); } to { opacity: 1; transform: none; } }
+@keyframes advice-line-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes overlay-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-enter { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes toast-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes thinking-dot { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@keyframes check-pop { 0% { opacity: 0; transform: scale(.6); } 70% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
+
+@media (max-width: 760px) {
+  .prompt-grid button:hover { transform: none; }
+  .thinking-card { grid-template-columns: 38px 1fr auto; }
+  .thinking-card .logo-mark { width: 38px; height: 38px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-dots > i { opacity: .65 !important; transform: none !important; }
+  .content > .chat-page, .content > .page, .welcome-mark, .welcome > .eyebrow, .welcome > h1, .welcome > p,
+  .prompt-grid button, .scope-note, .user-message, .assistant-message, .assistant-message > div > .category,
+  .assistant-message > div > p, .assistant-message .feedback-row, .thinking-card, .overlay, .modal, .toast,
+  .primary-button.is-success::before, .goal-card button.is-complete .icon { animation: none !important; transform: none !important; }
+}

@@ -1,0 +1,100 @@
+@import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap");
+
+html,
+body {
+  font-family: Raleway, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: Lora, "Noto Serif SC", serif;
+}
+
+a,
+button {
+  cursor: pointer;
+}
+
+a,
+.primary-button,
+.send-button {
+  transition: opacity 200ms ease, transform 200ms ease, background-color 200ms ease, box-shadow 200ms ease;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(8, 145, 178, 0.35);
+  outline-offset: 3px;
+}
+
+.primary-button,
+.send-button,
+.avatar {
+  background: var(--accent);
+  color: #000000;
+}
+
+.primary-button:hover,
+.send-button:hover {
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+.signed-out-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at top, #f6f6f7 0, #f5f5f0 58%, #edeeef 100%);
+}
+
+.signed-out-card {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 48px 40px;
+  text-align: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+}
+
+.signed-out-card .logo-mark {
+  width: 72px;
+  height: 72px;
+}
+
+.signed-out-card h1 {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 42px);
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.signed-out-card p {
+  margin: 0;
+  max-width: 440px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.signed-out-card .primary-button {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 220px;
+  padding: 13px 22px;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.signed-out-card small {
+  color: var(--muted);
+}

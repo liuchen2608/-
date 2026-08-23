@@ -46,7 +46,7 @@ test("ships the elephant identity and accessible motion states",async()=>{
   assert.match(page,/阿宝正在整理生活建议/);
   assert.match(page,/is-success/);
   assert.match(page,/is-complete/);
-  assert.match(motion,/abao-elephant-avatar\.png/);
+  assert.match(motion,/abao-elephant-avatar\.webp/);
   assert.match(motion,/prefers-reduced-motion/);
   assert.match(motion,/thinking-dot/);
 });

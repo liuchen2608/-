@@ -8,6 +8,13 @@
       "when": 1787012601130,
       "tag": "0000_white_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787482056692,
+      "tag": "0001_yellow_sir_ram",
+      "breakpoints": true
     }
   ]
 }

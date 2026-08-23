@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
-type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check";
+type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
 type Goal = { id: string; type: string; title: string };
@@ -36,6 +36,12 @@ const request = async <T,>(payload: Record<string, unknown>): Promise<T> => {
   return data as T;
 };
 
+const fetchBootstrap = async () => {
+  const response = await fetch("/api/bootstrap");
+  if (!response.ok) throw new Error("bootstrap_unavailable");
+  return await response.json() as BootstrapData;
+};
+
 export default function Home() {
   const [page, setPage] = useState<PageName>("生活建议");
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && (localStorage.getItem("abao-sidebar-collapsed") ?? String(window.innerWidth < 760)) === "true");
@@ -46,22 +52,18 @@ export default function Home() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [conversationId, setConversationId] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/bootstrap");
-      if (response.ok) setBootstrap(await response.json() as BootstrapData);
+      setBootstrap(await fetchBootstrap());
     } catch {
       setNotice("生活偏好暂时无法读取，你仍然可以继续浏览页面");
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void fetch("/api/bootstrap")
-      .then(async (response) => {
-        if (response.ok) setBootstrap(await response.json() as BootstrapData);
-      })
-      .catch(() => setNotice("生活偏好暂时无法读取，你仍然可以继续浏览页面"));
-  }, []);
+    const scheduledLoad = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(scheduledLoad);
+  }, [load]);
 
   const subjectId = bootstrap?.subject?.id ?? "";
   const go = (next: PageName) => {
@@ -99,13 +101,13 @@ export default function Home() {
         .reverse()
         .find((item: Consent) => item.subjectId === subjectId && item.scope === "external_ai_processing");
       if (latest?.status !== "granted") {
-        const confirmed = window.confirm("为了生成生活建议，大象阿宝会将本轮输入和必要的最近对话发送给 DeepSeek API。是否同意？你可以随时在数据与隐私中撤回授权。");
-        if (!confirmed) {
-          setNotice("未授权第三方 AI 处理，本次不会发送内容");
-          return;
+        const confirmed = window.confirm("为了从已审核的生活行动中选择今天的优先项，大象阿宝会将生活场景和你主动保存的生活偏好发送给 DeepSeek API，不会发送问题原文或对话历史。是否同意？你可以随时在数据与隐私中撤回授权。");
+        if (confirmed) {
+          await request({ action: "set_consent", subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status: "granted" });
+          await load();
+        } else {
+          setNotice("未授权第三方 AI 处理，本次将使用本地规则生成建议");
         }
-        await request({ action: "set_consent", subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status: "granted" });
-        await load();
       }
       const created = await request<{ id: string }>({ action: "create_conversation", subjectId, title: text.slice(0, 30) });
       const result = await request<Conversation>({ action: "send_message", conversationId: created.id, content: text, inputType: "text" });
@@ -113,16 +115,9 @@ export default function Home() {
       setConversation(result);
       await load();
     } catch {
-      setConversation({
-        userMessage: { role: "user", content: text },
-        assistantMessage: {
-          role: "assistant",
-          content: "我们可以先从一个容易完成的小动作开始。你更想改善饮食、作息、运动还是日常习惯？",
-          category: "习惯",
-          responseType: "recommendation",
-          modelVersion: "local-fallback",
-        },
-      });
+      setConversation(null);
+      setConversationId("");
+      setNotice("生活建议暂时无法生成，请重新登录或稍后重试");
     }
     go("生活建议");
   };
@@ -136,7 +131,7 @@ export default function Home() {
             <span><b>大象阿宝</b><small>健康生活助手</small></span>
           </button>
           <button className="collapse-button" onClick={toggle} aria-label={collapsed ? "展开侧栏" : "收起侧栏"} aria-expanded={!collapsed}>
-            <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
+            <Icon name={collapsed ? "chevron-right" : "chevron-left"} />
           </button>
         </div>
         <nav aria-label="主要功能">
@@ -173,7 +168,7 @@ export default function Home() {
         </div>
       </section>
 
-      {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示">×</button></div>}
+      {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示"><Icon name="close" /></button></div>}
       {privacy && <PrivacyModal close={() => setPrivacy(false)} subjectId={subjectId} reload={load} setNotice={setNotice} />}
       {history && <HistoryModal close={() => setHistory(false)} openConversation={openConversation} />}
     </main>
@@ -224,7 +219,7 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
             <div className="prompt-grid">
               {prompts.map(([title, description]) => (
                 <button key={title} onClick={() => submit(title)}>
-                  <span><b>{title}</b><small>{description}</small></span><strong aria-hidden="true">→</strong>
+                  <span><b>{title}</b><small>{description}</small></span><span className="prompt-arrow"><Icon name="arrow-right" /></span>
                 </button>
               ))}
             </div>
@@ -367,9 +362,9 @@ function PrivacyModal({ close, subjectId, reload, setNotice }: { close: () => vo
     else setNotice("账号暂时无法删除");
   };
   return <div className="overlay"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
-    <button className="close-button" onClick={close} aria-label="关闭">×</button>
+    <button className="close-button" onClick={close} aria-label="关闭"><Icon name="close" /></button>
     <span className="modal-kicker">数据与隐私</span><h2 id="privacy-title">你的内容由你控制</h2>
-    <p>只有在你授权后，当前问题和必要的最近对话才会发送给 DeepSeek API。生活偏好和建议记录保存在你的账号下。</p>
+    <p>只有在你授权后，生活场景和你主动保存的生活偏好才会发送给 DeepSeek API，用于从已审核行动中选择优先项；问题原文和对话历史不会发送。生活偏好和建议记录保存在你的账号下。</p>
     <div className="permission"><span><b>DeepSeek 内容处理</b><small>用于生成生活方式建议</small></span><div><button onClick={() => setPermission("granted")}>授权</button><button onClick={() => setPermission("revoked")}>撤回</button></div></div>
     <div className="modal-actions"><button className="danger-button" onClick={deleteAccount}>删除账号及全部数据</button><button className="primary-button" onClick={close}>完成</button></div>
   </section></div>;
@@ -390,7 +385,7 @@ function HistoryModal({ close, openConversation }: { close: () => void; openConv
     });
   }, []);
   return <div className="overlay"><section className="modal history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
-    <button className="close-button" onClick={close} aria-label="关闭">×</button>
+    <button className="close-button" onClick={close} aria-label="关闭"><Icon name="close" /></button>
     <span className="modal-kicker">建议记录</span><h2 id="history-title">找回以前的生活建议</h2>
     <label className="search-field"><span>搜索关键词</span><input value={query} onChange={(event) => { setQuery(event.target.value); void search(event.target.value); }} placeholder="例如：睡眠、早餐、运动" /></label>
     {rows.length ? <div className="history-list">{rows.map((row) => <button key={row.id} onClick={() => openConversation(row.id)}><b>{row.title}</b><span>{row.summary || "暂无摘要"}</span><small>{new Date(row.updatedAt).toLocaleString()}</small></button>)}</div> : <div className="history-empty"><Icon name="history" /><b>暂无匹配记录</b><span>完成一次生活建议对话后，可以在这里按关键词查找。</span></div>}
@@ -409,6 +404,10 @@ function Icon({ name }: { name: IconName }) {
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
     send: <><path d="m22 2-7 20-4-9-9-4z" /><path d="M22 2 11 13" /></>,
     check: <path d="m5 12 4 4L19 6" />,
+    "chevron-left": <path d="m15 18-6-6 6-6" />,
+    "chevron-right": <path d="m9 18 6-6-6-6" />,
+    close: <path d="M6 6l12 12M18 6 6 18" />,
+    "arrow-right": <path d="M5 12h14M13 6l6 6-6 6" />,
   };
   return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }

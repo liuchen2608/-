@@ -1,13 +1,13 @@
 /* Calm, state-driven motion for the lifestyle assistant. */
 .logo-mark {
-  background-color: #28634d;
+  background-color: #6b7280;
   background-image: url('/abao-elephant-avatar.webp');
   background-repeat: no-repeat;
   background-position: center;
   background-size: 140%;
   color: transparent;
   overflow: hidden;
-  box-shadow: 0 5px 14px rgba(34, 88, 66, .16);
+  box-shadow: 0 5px 14px rgba(15, 23, 42, .16);
 }
 
 .content > .chat-page,
@@ -26,9 +26,9 @@
 .prompt-grid button:nth-child(2) { animation-delay: 280ms; }
 .prompt-grid button:nth-child(3) { animation-delay: 340ms; }
 .prompt-grid button:nth-child(4) { animation-delay: 400ms; }
-.prompt-grid button:hover { transform: translateY(-2px); border-color: #9bbcac; box-shadow: 0 10px 24px rgba(35, 71, 52, .09); }
-.prompt-grid button strong { transition: transform 180ms ease; }
-.prompt-grid button:hover strong { transform: translateX(3px); }
+.prompt-grid button:hover { transform: translateY(-2px); border-color: #6b7280; box-shadow: 0 10px 24px rgba(15, 23, 42, .09); }
+.prompt-arrow { display: grid; place-items: center; color: var(--primary); transition: transform 180ms ease; }
+.prompt-grid button:hover .prompt-arrow { transform: translateX(3px); }
 
 button { transition: transform 160ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
 button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
@@ -49,7 +49,7 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 255, 255, .86);
-  box-shadow: 0 9px 26px rgba(35, 71, 52, .07);
+  box-shadow: 0 9px 26px rgba(15, 23, 42, .07);
   animation: assistant-message-enter 260ms cubic-bezier(.22, 1, .36, 1) both;
 }
 .thinking-card .logo-mark { width: 42px; height: 42px; border-radius: 13px; }
@@ -64,10 +64,9 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
 .overlay { animation: overlay-enter 180ms ease-out both; }
 .modal { animation: modal-enter 230ms cubic-bezier(.22, 1, .36, 1) both; }
 .toast { animation: toast-enter 260ms cubic-bezier(.22, 1, .36, 1) both; }
-.primary-button.is-success { background: #32775c; box-shadow: 0 0 0 4px rgba(50, 119, 92, .12); }
-.primary-button.is-success::before { content: '✓'; display: inline-block; margin-right: 7px; animation: check-pop 360ms cubic-bezier(.22, 1, .36, 1); }
+.primary-button.is-success { background: #0e7490; box-shadow: 0 0 0 4px rgba(8, 145, 178, .14); }
 .goal-card { transition: background-color 300ms ease, border-color 300ms ease, box-shadow 300ms ease; }
-.goal-card button.is-complete { background: #e6f3eb; border-color: #8eb7a3; color: #28634d; box-shadow: 0 0 0 4px rgba(50, 119, 92, .09); }
+.goal-card button.is-complete { background: #ecfeff; border-color: #67e8f9; color: #155e75; box-shadow: 0 0 0 4px rgba(8, 145, 178, .09); }
 .goal-card button.is-complete .icon { animation: check-pop 420ms cubic-bezier(.22, 1, .36, 1); }
 
 @keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -93,5 +92,5 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
   .content > .chat-page, .content > .page, .welcome-mark, .welcome > .eyebrow, .welcome > h1, .welcome > p,
   .prompt-grid button, .scope-note, .user-message, .assistant-message, .assistant-message > div > .category,
   .assistant-message > div > p, .assistant-message .feedback-row, .thinking-card, .overlay, .modal, .toast,
-  .primary-button.is-success::before, .goal-card button.is-complete .icon { animation: none !important; transform: none !important; }
+  .goal-card button.is-complete .icon { animation: none !important; transform: none !important; }
 }

@@ -1,114 +1,401 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-const nav = [["＋","新对话","健康问答"],["▣","健康档案","健康档案"],["◎","目标与提醒","目标与提醒"],["⌁","设备数据","设备数据"],["✚","医疗服务","医疗服务"]];
-const members = ["我"];
-const action = async (payload:Record<string,unknown>) => {
-  const response=await fetch("/api/product",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-  const data=await response.json();if(!response.ok)throw new Error(data.error||"request_failed");return data;
+type PageName = "生活建议" | "生活偏好" | "习惯计划";
+type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check";
+type Subject = { id: string; profileJson?: string | null };
+type Consent = { subjectId: string; scope: string; status: string };
+type Goal = { id: string; type: string; title: string };
+type Message = { id?: string; role: "user" | "assistant"; content: string; category?: string; responseType?: string };
+type Conversation = { userMessage?: Message; assistantMessage?: Message; items?: Message[] };
+type BootstrapData = { subject?: Subject; consents?: Consent[]; goals?: Goal[] };
+type SetNotice = (message: string) => void;
+
+const nav: Array<{ label: PageName; icon: IconName }> = [
+  { label: "生活建议", icon: "chat" },
+  { label: "生活偏好", icon: "sliders" },
+  { label: "习惯计划", icon: "target" },
+];
+
+const prompts = [
+  ["帮我安排健康的一天", "早、中、晚的饮食、活动与休息建议"],
+  ["最近总是睡不好", "从今晚能做到的小调整开始"],
+  ["给我一份新手运动计划", "按时间和经验安排低门槛活动"],
+  ["帮我改善晚餐习惯", "减少太晚、太撑和随意进食"],
+];
+
+const request = async <T,>(payload: Record<string, unknown>): Promise<T> => {
+  const response = await fetch("/api/product", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "request_failed");
+  return data as T;
 };
 
-export default function Home(){
-  const [page,setPage]=useState("健康问答");
-  const [sideCollapsed,setSideCollapsed]=useState(false);
-  const [member,setMember]=useState("我");
-  const [notice,setNotice]=useState("");
-  const [privacy,setPrivacy]=useState(false);
-  const [history,setHistory]=useState(false);
-  const [bootstrap,setBootstrap]=useState<any>(null);
-  const [conversation,setConversation]=useState<any>(null);
-  const [conversationId,setConversationId]=useState("");
-  const load=async()=>{try{const response=await fetch("/api/bootstrap");if(response.ok){const data=await response.json();setBootstrap(data);if(data.subjects?.[0])setMember((current:string)=>data.subjects.some((subject:any)=>subject.name===current&&subject.authorizationStatus==="active")?current:(data.subjects.find((subject:any)=>subject.authorizationStatus==="active")?.name??data.subjects[0].name))}}catch{}};
-  useEffect(()=>{load();const stored=localStorage.getItem("abao-sidebar-collapsed");setSideCollapsed(stored===null?window.innerWidth<760:stored==="true")},[]);
-  const subjectId=bootstrap?.subjects?.find((s:any)=>s.name===member)?.id??(member==="我"?bootstrap?.subjects?.[0]?.id:"")??"";
-  const go=(next:string)=>{setPage(next);setNotice("");window.scrollTo({top:0,behavior:"smooth"})};
-  const toggleSide=()=>setSideCollapsed(value=>{const next=!value;localStorage.setItem("abao-sidebar-collapsed",String(next));return next});
-  const newConversation=()=>{setConversation(null);setConversationId("");go("健康问答")};
-  const openConversation=async(id:string)=>{try{const response=await fetch(`/api/product?resource=messages&conversationId=${encodeURIComponent(id)}`);const data=await response.json();if(!response.ok)throw new Error();setConversationId(id);setConversation({items:data.messages});setHistory(false);go("健康问答")}catch{setNotice("历史对话暂时无法读取")}};
-  const begin=async(text:string)=>{try{if(!subjectId)throw new Error("profile_unavailable");const latestAiConsent=[...(bootstrap?.consents??[])].reverse().find((c:any)=>c.subjectId===subjectId&&c.scope==="external_ai_processing");if(latestAiConsent?.status!=="granted"){const confirmed=window.confirm("为生成智能回答，大象阿宝会把本轮输入和必要的最近对话发送给 DeepSeek API 处理。请勿输入与健康问题无关的身份信息。你可以随时在隐私设置中撤回授权。是否同意？");if(!confirmed){setNotice("未授权第三方 AI 处理，本次不会发送健康内容");return}await action({action:"set_consent",subjectId,scope:"external_ai_processing",purpose:"将必要的健康对话发送给 DeepSeek API 生成回答",status:"granted"});await load()}const created=await action({action:"create_conversation",subjectId,title:text.slice(0,30)});const result=await action({action:"send_message",conversationId:created.id,content:text,inputType:"text"});setConversationId(created.id);setConversation(result);await load()}catch{setConversation({userMessage:{role:"user",content:text},assistantMessage:{role:"assistant",content:"为了更准确地理解，我还想确认：这种情况持续多久、严重程度有没有变化？",riskLevel:"general_consultation",modelVersion:"local-fallback"}})}go("健康问答")};
-  return <main className={`shell app-shell ${sideCollapsed?"side-collapsed":""}`}>
-    <aside className="side">
-      <div className="side-head"><button className="brand" onClick={newConversation} title="大象阿宝"><span className="brand-elephant">🐘</span><span className="brand-name">大象阿宝<small>AI 健康朋友</small></span></button><button className="side-toggle" onClick={toggleSide} aria-label={sideCollapsed?"展开侧栏":"收起侧栏"} title={sideCollapsed?"展开侧栏":"收起侧栏"}>{sideCollapsed?"›":"‹"}</button></div>
-      <nav aria-label="产品功能">{nav.map(([icon,label,target])=><button key={label} title={label} className={page===target?"active":""} onClick={()=>target==="健康问答"?newConversation():go(target)}><i>{icon}</i><span>{label}</span></button>)}</nav>
-      <div className="side-foot"><button onClick={()=>setHistory(true)}><i>⌕</i><span>历史与检索</span></button><button onClick={()=>setPrivacy(true)}><i>◇</i><span>隐私与授权</span></button></div>
-    </aside>
-    <section className="main">
-      <header className="top chatgpt-top"><button className="mobile-side-toggle" onClick={toggleSide} aria-label="切换侧栏">☰</button><button className="model-title" onClick={newConversation}>大象阿宝 <span>健康助手</span></button><div className="top-actions"><button className="subject-switch" onClick={()=>{const names=(bootstrap?.subjects??[]).filter((s:any)=>s.authorizationStatus==="active").map((s:any)=>s.name);if(names.length>1)setMember(names[(names.indexOf(member)+1)%names.length]);else setNotice("请先在健康档案中创建并授权家庭成员")}}>为 {member} 咨询⌄</button><button className="top-icon" onClick={()=>setHistory(true)} aria-label="搜索历史">⌕</button><button className="user" onClick={()=>setPrivacy(true)} aria-label="隐私与账号">我</button></div></header>
-      <div className={`content ${page==="健康问答"?"chat-content":""}`}><Panel page={page} go={go} member={member} setMember={setMember} setNotice={setNotice} subjectId={subjectId} bootstrap={bootstrap} conversation={conversation} conversationId={conversationId} reload={load} onStart={begin}/></div>
+export default function Home() {
+  const [page, setPage] = useState<PageName>("生活建议");
+  const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && (localStorage.getItem("abao-sidebar-collapsed") ?? String(window.innerWidth < 760)) === "true");
+  const [notice, setNotice] = useState("");
+  const [privacy, setPrivacy] = useState(false);
+  const [history, setHistory] = useState(false);
+  const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [conversationId, setConversationId] = useState("");
+
+  const load = async () => {
+    try {
+      const response = await fetch("/api/bootstrap");
+      if (response.ok) setBootstrap(await response.json() as BootstrapData);
+    } catch {
+      setNotice("生活偏好暂时无法读取，你仍然可以继续浏览页面");
+    }
+  };
+
+  useEffect(() => {
+    void fetch("/api/bootstrap")
+      .then(async (response) => {
+        if (response.ok) setBootstrap(await response.json() as BootstrapData);
+      })
+      .catch(() => setNotice("生活偏好暂时无法读取，你仍然可以继续浏览页面"));
+  }, []);
+
+  const subjectId = bootstrap?.subject?.id ?? "";
+  const go = (next: PageName) => {
+    setPage(next);
+    setNotice("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const toggle = () => setCollapsed((current) => {
+    const next = !current;
+    localStorage.setItem("abao-sidebar-collapsed", String(next));
+    return next;
+  });
+  const newConversation = () => {
+    setConversation(null);
+    setConversationId("");
+    go("生活建议");
+  };
+  const openConversation = async (id: string) => {
+    try {
+      const response = await fetch(`/api/product?resource=messages&conversationId=${encodeURIComponent(id)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error("history_unavailable");
+      setConversationId(id);
+      setConversation({ items: data.messages });
+      setHistory(false);
+      go("生活建议");
+    } catch {
+      setNotice("建议记录暂时无法读取");
+    }
+  };
+  const begin = async (text: string) => {
+    try {
+      if (!subjectId) throw new Error("profile_unavailable");
+      const latest = [...(bootstrap?.consents ?? [])]
+        .reverse()
+        .find((item: Consent) => item.subjectId === subjectId && item.scope === "external_ai_processing");
+      if (latest?.status !== "granted") {
+        const confirmed = window.confirm("为了生成生活建议，大象阿宝会将本轮输入和必要的最近对话发送给 DeepSeek API。是否同意？你可以随时在数据与隐私中撤回授权。");
+        if (!confirmed) {
+          setNotice("未授权第三方 AI 处理，本次不会发送内容");
+          return;
+        }
+        await request({ action: "set_consent", subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status: "granted" });
+        await load();
+      }
+      const created = await request<{ id: string }>({ action: "create_conversation", subjectId, title: text.slice(0, 30) });
+      const result = await request<Conversation>({ action: "send_message", conversationId: created.id, content: text, inputType: "text" });
+      setConversationId(created.id);
+      setConversation(result);
+      await load();
+    } catch {
+      setConversation({
+        userMessage: { role: "user", content: text },
+        assistantMessage: {
+          role: "assistant",
+          content: "我们可以先从一个容易完成的小动作开始。你更想改善饮食、作息、运动还是日常习惯？",
+          category: "习惯",
+          responseType: "recommendation",
+          modelVersion: "local-fallback",
+        },
+      });
+    }
+    go("生活建议");
+  };
+
+  return (
+    <main className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
+      <aside className="sidebar">
+        <div className="sidebar-head">
+          <button className="brand" onClick={newConversation} aria-label="返回大象阿宝首页">
+            <LogoMark />
+            <span><b>大象阿宝</b><small>健康生活助手</small></span>
+          </button>
+          <button className="collapse-button" onClick={toggle} aria-label={collapsed ? "展开侧栏" : "收起侧栏"} aria-expanded={!collapsed}>
+            <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
+          </button>
+        </div>
+        <nav aria-label="主要功能">
+          <button className={page === "生活建议" ? "active" : ""} onClick={newConversation}>
+            <Icon name="chat" /><span>新对话</span>
+          </button>
+          {nav.slice(1).map((item) => (
+            <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => go(item.label)}>
+              <Icon name={item.icon} /><span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-foot">
+          <button onClick={() => setHistory(true)}><Icon name="history" /><span>建议记录</span></button>
+          <button onClick={() => setPrivacy(true)}><Icon name="privacy" /><span>数据与隐私</span></button>
+        </div>
+      </aside>
+
+      <section className="workspace">
+        <header className="topbar">
+          <button className="mobile-menu" onClick={toggle} aria-label="切换导航"><Icon name="menu" /></button>
+          <button className="product-title" onClick={newConversation}>大象阿宝 <span>健康生活助手</span></button>
+          <div className="top-actions">
+            <span className="scope-badge">只提供生活方式推荐</span>
+            <button className="icon-button" onClick={() => setHistory(true)} aria-label="打开建议记录"><Icon name="history" /></button>
+            <button className="avatar" onClick={() => setPrivacy(true)} aria-label="打开数据与隐私">我</button>
+          </div>
+        </header>
+
+        <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
+          {page === "生活建议" && <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} setNotice={setNotice} />}
+          {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
+          {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
+        </div>
+      </section>
+
+      {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示">×</button></div>}
+      {privacy && <PrivacyModal close={() => setPrivacy(false)} subjectId={subjectId} reload={load} setNotice={setNotice} />}
+      {history && <HistoryModal close={() => setHistory(false)} openConversation={openConversation} />}
+    </main>
+  );
+}
+
+function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; setNotice: SetNotice }) {
+  const [text, setText] = useState("");
+  const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
+  const [sending, setSending] = useState(false);
+
+  const submit = async (value?: string) => {
+    const content = (value ?? text).trim();
+    if (!content || sending) return;
+    setSending(true);
+    setText("");
+    try {
+      if (conversationId) {
+        const result = await request<Required<Pick<Conversation, "userMessage" | "assistantMessage">>>({ action: "send_message", conversationId, content, inputType: "text" });
+        setItems((current) => [...current, result.userMessage, result.assistantMessage]);
+      } else {
+        await onStart(content);
+      }
+    } catch {
+      setNotice("生活建议暂时无法生成，请稍后重试");
+    } finally {
+      setSending(false);
+    }
+  };
+  const rate = async (messageId: string, type: string) => {
+    try {
+      if (messageId) await request({ action: "feedback", messageId, type });
+      setNotice("感谢反馈，我们会继续优化建议的可执行性");
+    } catch {
+      setNotice("反馈暂时无法保存");
+    }
+  };
+
+  return (
+    <div className="chat-page">
+      <div className="chat-scroll">
+        {!items.length ? (
+          <section className="welcome">
+            <div className="welcome-mark"><LogoMark /></div>
+            <span className="eyebrow">今天从一件小事开始</span>
+            <h1>你好，我是阿宝</h1>
+            <p>告诉我你想改善的饮食、作息、运动或日常习惯，我会给你一份简单、温和、可以马上开始的建议。</p>
+            <div className="prompt-grid">
+              {prompts.map(([title, description]) => (
+                <button key={title} onClick={() => submit(title)}>
+                  <span><b>{title}</b><small>{description}</small></span><strong aria-hidden="true">→</strong>
+                </button>
+              ))}
+            </div>
+            <div className="scope-note"><Icon name="check" /><span>只讨论日常生活方式，不判断身体问题，不提供相关处理方案。</span></div>
+          </section>
+        ) : (
+          <div className="conversation">
+            {items.map((message, index) => message.role === "user" ? (
+              <div className="user-message" key={message.id ?? index}>{message.content}</div>
+            ) : (
+              <article className={`assistant-message ${message.responseType === "boundary_refusal" ? "boundary-card" : ""}`} key={message.id ?? index}>
+                <LogoMark />
+                <div>
+                  <span className="category">{message.category ?? "生活建议"}</span>
+                  <p>{message.content}</p>
+                  {message.id && <div className="feedback-row">
+                    <span>这份建议怎么样？</span>
+                    <button onClick={() => rate(message.id, "helpful")}>有帮助</button>
+                    <button onClick={() => rate(message.id, "too_hard")}>太难执行</button>
+                    <button onClick={() => rate(message.id, "not_fit")}>不符合习惯</button>
+                    <button onClick={() => rate(message.id, "inappropriate")}>内容不合适</button>
+                  </div>}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="chat-dock">
+        <div className="composer">
+          <label htmlFor="advice-input">你想改善什么？</label>
+          <textarea id="advice-input" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); }
+          }} placeholder="例如：我晚上总是很晚睡，想调整作息" maxLength={2000} />
+          <div><small>{text.length}/2000</small><button className="send-button" onClick={() => submit()} disabled={sending || !text.trim()} aria-label="发送问题"><Icon name="send" />{sending ? "生成中" : "发送"}</button></div>
+        </div>
+        <p className="boundary-text">建议仅用于饮食、作息、运动和习惯管理等日常生活参考。</p>
+      </div>
+    </div>
+  );
+}
+
+function parsePreferences(subject?: Subject) {
+  try { return (JSON.parse(subject?.profileJson ?? "{}") as { lifestylePreferences?: Record<string, string> }).lifestylePreferences ?? {}; } catch { return {}; }
+}
+
+function PreferencePage({ subject, reload, setNotice }: { subject?: Subject; reload: () => Promise<void>; setNotice: SetNotice }) {
+  const current = parsePreferences(subject);
+  const [wakeTime, setWakeTime] = useState(current.wakeTime ?? "07:30");
+  const [sleepTime, setSleepTime] = useState(current.sleepTime ?? "23:00");
+  const [mealStyle, setMealStyle] = useState(current.mealStyle ?? "规律三餐");
+  const [exerciseLevel, setExerciseLevel] = useState(current.exerciseLevel ?? "刚开始");
+  const [availableMinutes, setAvailableMinutes] = useState(current.availableMinutes ?? "20");
+  const [lifestyleGoal, setLifestyleGoal] = useState(current.lifestyleGoal ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!subject?.id || saving) return;
+    setSaving(true);
+    try {
+      await request({ action: "update_preferences", subjectId: subject.id, preferences: { wakeTime, sleepTime, mealStyle, exerciseLevel, availableMinutes, lifestyleGoal } });
+      await reload();
+      setNotice("生活偏好已保存，后续建议会优先参考这些信息");
+    } catch {
+      setNotice("生活偏好暂时无法保存");
+    } finally { setSaving(false); }
+  };
+
+  return <div className="page preferences-page">
+    <PageHeader kicker="只保存你主动填写的内容" title="生活偏好" description="这些信息只用于让饮食、作息和运动建议更贴近日常安排。" />
+    <section className="form-card">
+      <div className="field-grid">
+        <label><span>通常起床时间</span><input type="time" value={wakeTime} onChange={(event) => setWakeTime(event.target.value)} /></label>
+        <label><span>希望入睡时间</span><input type="time" value={sleepTime} onChange={(event) => setSleepTime(event.target.value)} /></label>
+        <label><span>饮食习惯</span><select value={mealStyle} onChange={(event) => setMealStyle(event.target.value)}><option>规律三餐</option><option>经常不吃早餐</option><option>经常点外卖</option><option>晚餐较晚</option></select></label>
+        <label><span>运动经验</span><select value={exerciseLevel} onChange={(event) => setExerciseLevel(event.target.value)}><option>刚开始</option><option>偶尔运动</option><option>保持规律运动</option></select></label>
+        <label><span>每天可活动时间</span><select value={availableMinutes} onChange={(event) => setAvailableMinutes(event.target.value)}><option value="10">10 分钟</option><option value="20">20 分钟</option><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="60">60 分钟</option></select></label>
+        <label className="full-field"><span>最想改善的生活目标</span><textarea value={lifestyleGoal} onChange={(event) => setLifestyleGoal(event.target.value)} maxLength={200} placeholder="例如：希望晚上 11 点前放下手机并准备休息" /><small>{lifestyleGoal.length}/200</small></label>
+      </div>
+      <div className="form-actions"><p>不会询问或使用疾病、检查和药品信息来生成计划。</p><button className="primary-button" onClick={save} disabled={saving}>{saving ? "保存中" : "保存生活偏好"}</button></div>
     </section>
-    {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
-    {privacy&&<PrivacyModal close={()=>setPrivacy(false)} setNotice={setNotice} subjectId={subjectId} reload={load}/>} 
-    {history&&<HistoryModal close={()=>setHistory(false)} go={go} openConversation={openConversation} subjectId={subjectId}/>} 
-  </main>
+  </div>;
 }
 
-function AgentHome({member,setMember,subjects,go,onStart,openConversation,subjectId,reload,setPrivacy,setHistory,notice,setNotice,privacy,history}:any){
-  const [text,setText]=useState("");
-  const start=()=>{if(!text.trim())return;onStart(text.trim())};
-  return <main className="agent-home">
-    <header className="agent-top"><button className="agent-brand" aria-label="大象阿宝首页"><span>🐘</span><b>大象阿宝</b></button><div className="agent-actions"><button onClick={()=>setHistory(true)}>⌕　历史记录</button><button onClick={()=>{const names=(subjects??[]).filter((s:any)=>s.authorizationStatus==="active").map((s:any)=>s.name);if(names.length>1)setMember(names[(names.indexOf(member)+1)%names.length]);else setNotice("请先在健康档案中创建并完成家庭成员授权")}}>为 {member} 咨询⌄</button><button className="agent-avatar" onClick={()=>setPrivacy(true)}>我</button></div></header>
-    <section className="agent-stage"><div className="agent-welcome"><div className="agent-mark">🐘</div><h1>你好，我是阿宝</h1><p>你的 AI 健康朋友。今天想聊些什么？</p></div><div className="agent-composer"><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();start()}}} placeholder="描述健康问题、症状，或上传健康资料" aria-label="向阿宝提问"/><div className="agent-tools"><div><button onClick={()=>setNotice("图片上传会在使用时请求相册或相机授权")} title="上传图片">＋</button><button onClick={()=>setNotice("语音输入会在使用时请求麦克风授权")} title="语音输入">♩</button></div><button className="agent-send" onClick={start} aria-label="发送">↑</button></div></div><div className="agent-prompts"><span>你可以试试</span>{["最近总是睡不好","帮我看懂体检报告","如何建立健康目标"].map(x=><button key={x} onClick={()=>setText(x)}>{x}</button>)}</div><p className="agent-disclaimer">内容仅供健康信息参考，不能替代专业医生的诊断和治疗建议。如有紧急症状，请立即联系急救或前往急诊。</p></section>
-    <button className="agent-manage" onClick={()=>go("健康档案")}>健康管理　›</button>
-    {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
-    {privacy&&<PrivacyModal close={()=>setPrivacy(false)} setNotice={setNotice} subjectId={subjectId} reload={reload}/>} 
-    {history&&<HistoryModal close={()=>setHistory(false)} go={go} openConversation={openConversation} subjectId={subjectId}/>} 
-  </main>
+function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string; goals: Goal[]; reload: () => Promise<void>; setNotice: SetNotice }) {
+  const [type, setType] = useState("作息");
+  const [title, setTitle] = useState("");
+  const create = async () => {
+    if (!subjectId || !title.trim()) return;
+    try {
+      await request({ action: "create_goal", subjectId, type, title: title.trim(), plan: { cycle: "weekly", dailyAction: title.trim(), checkin: "manual" }, reminder: { enabled: false } });
+      setTitle("");
+      await reload();
+      setNotice("习惯计划已创建");
+    } catch { setNotice("习惯计划暂时无法保存"); }
+  };
+  return <div className="page habit-page">
+    <PageHeader kicker="一次只改变一件小事" title="习惯计划" description="选择一个方向，写下一项当天可以完成的行动，并用打卡记录坚持情况。" />
+    <section className="goal-builder">
+      <div className="segmented" aria-label="计划类型">{["作息", "饮食", "运动", "日常习惯"].map((item) => <button key={item} className={type === item ? "selected" : ""} onClick={() => setType(item)}>{item}</button>)}</div>
+      <label><span>我的行动</span><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={80} placeholder="例如：晚饭后散步 10 分钟" /></label>
+      <button className="primary-button" onClick={create} disabled={!title.trim()}>创建计划</button>
+    </section>
+    {goals.length ? <div className="goal-list">{goals.map((goal) => <article className="goal-card" key={goal.id}>
+      <div><span>{goal.type}</span><h2>{goal.title}</h2><p>今天完成后点一下打卡，不需要补做或追求满分。</p></div>
+      <button onClick={async () => { await request({ action: "checkin", goalId: goal.id }); setNotice("今天的行动已记录"); }}><Icon name="check" />完成今日行动</button>
+    </article>)}</div> : <section className="empty-card"><Icon name="target" /><h2>还没有习惯计划</h2><p>从一项十分钟内可以完成的小行动开始。</p></section>}
+  </div>;
 }
 
-function Panel(props:any){switch(props.page){
-  case "健康问答": return <AskPage {...props}/>;
-  case "健康档案": return <ArchivePage {...props}/>;
-  case "目标与提醒": return <GoalPage {...props}/>;
-  case "设备数据": return <DevicePage {...props}/>;
-  case "医疗服务": return <ServicePage {...props}/>;
-  default:return <HomePage {...props}/>;
-}}
-
-function HomePage({go,member,setMember,setNotice,bootstrap}:any){return <>
-  <section className="hero"><div className="hero-copy"><span className="eyebrow">AI 健康朋友</span><h1>从一个健康问题开始，<br/>持续照顾你和家人</h1><p>用文字、语音或图片描述问题。阿宝会补充询问必要信息，并在需要时连接专业医疗服务。</p><div className="hero-actions"><button className="primary" onClick={()=>go("健康问答")}>开始健康问答</button><button onClick={()=>go("图片解读")}>上传健康资料</button></div><small>AI 输出仅供参考，不能替代专业医生的诊断和治疗建议。</small></div><div className="hero-art" aria-hidden="true"><span className="tag t1">主动追问</span><span className="tag t2">风险分流</span><div>🐘</div><span className="tag t3">档案参考</span></div></section>
-  <SubjectBar member={member} setMember={setMember} subjects={bootstrap?.subjects}/>
-  <section className="section"><div className="section-title"><div><span>核心能力</span><h2>围绕健康管理的完整闭环</h2></div><p>问题理解、行动建议、持续记录与专业服务连接</p></div><div className="feature-grid">{[["◌","健康问答","文字、语音、图片提问与主动追问","健康问答"],["▤","图片与文件解读","质量检查、字段确认、通俗解释","图片解读"],["▣","个人与家庭档案","按人、时间和资料类型管理记录","健康档案"],["◎","目标、计划与提醒","可编辑计划、打卡与提醒控制","目标与提醒"],["⌁","设备数据接入","同步状态、数据来源与质量说明","设备数据"],["✚","医疗服务连接","在线问诊、预约挂号与云陪诊","医疗服务"]].map(([icon,title,desc,target])=><button key={title} onClick={()=>go(target)}><i>{icon}</i><span><b>{title}</b><em>{desc}</em></span><strong>›</strong></button>)}</div></section>
-  <section className="safety"><i>!</i><div><b>医疗安全是所有功能的前提</b><span>疑似急症时停止普通问答，明确建议联系急救或立即线下就医；信息不足时不会输出确定性结论。</span></div><button onClick={()=>setNotice("安全边界：急症优先、说明不确定性、高风险操作需用户确认")}>查看安全边界</button></section>
-</>}
-
-function SubjectBar({member,setMember,subjects}:any){const names=subjects?.length?subjects.filter((s:any)=>s.authorizationStatus==="active").map((s:any)=>s.name):members;return <div className="subject-bar"><span>为谁管理健康</span>{names.map((m:string)=><button key={m} className={member===m?"selected":""} onClick={()=>setMember(m)}>{m}</button>)}<p>只有已授权主体可被使用；不同成员的数据不会混入同一上下文。</p></div>}
-
-function PageIntro({kicker,title,desc,icon}:any){return <div className="page-intro"><span>{kicker}</span><h1>{title}</h1><p>{desc}</p><i>{icon}</i></div>}
-
-function AskPage({member,setNotice,conversation,conversationId,onStart}:any){
-  const [text,setText]=useState("");const [items,setItems]=useState<any[]>([]);const [sending,setSending]=useState(false);
-  useEffect(()=>{if(conversation)setItems(conversation.items??[conversation.userMessage,conversation.assistantMessage].filter(Boolean))},[conversation]);
-  const submit=async(value?:string)=>{const content=(value??text).trim();if(!content||sending)return;setSending(true);setText("");try{if(conversationId){const result=await action({action:"send_message",conversationId,content,inputType:"text"});setItems(v=>[...v,result.userMessage,result.assistantMessage])}else await onStart(content)}catch{setNotice("会话暂时不可用，请稍后重试")}finally{setSending(false)}};
-  const rate=async(messageId:string,type:string)=>{try{if(messageId)await action({action:"feedback",messageId,type});setNotice("感谢反馈，已用于质量与安全改进")}catch{setNotice("反馈暂未保存")}};
-  return <div className="chat-page"><div className="chat-scroll">
-    {!items.length&&<section className="chat-welcome"><div className="welcome-mark">🐘</div><h1>你好，我是阿宝</h1><p>你的 AI 健康朋友。今天想聊些什么？</p><div className="starter-grid">{[["最近总是睡不好","一起梳理睡眠时间与影响因素"],["帮我看懂体检报告","上传资料前会先征求授权"],["最近经常感到头痛","先了解持续时间与伴随症状"],["想建立健康目标","从睡眠、运动或饮食开始"]].map(([title,desc])=><button key={title} onClick={()=>submit(title)}><b>{title}</b><span>{desc}</span></button>)}</div></section>}
-    {!!items.length&&<div className="conversation">{items.map((m:any,i:number)=>m.role==="user"?<div className="mine" key={m.id||i}>{m.content}</div>:m.riskLevel==="emergency"?<div className="risk-card" key={m.id||i}><i>!</i><h2>需要立即处理的高风险情况</h2><p>{m.content}</p><button onClick={()=>setNotice("请立即联系当地急救服务或前往急诊")}>紧急行动建议</button></div>:<div className="abo" key={m.id||i}><span>🐘</span><div><b>{m.riskLevel==="high_risk"?"需要更谨慎评估":"还需要补充信息"}</b><p>{m.content}</p><div className="choice-row"><button onClick={()=>setText("少于 1 周")}>少于 1 周</button><button onClick={()=>setText("1–4 周")}>1–4 周</button><button onClick={()=>setText("超过 1 个月")}>超过 1 个月</button></div><small>上下文：{member}的当前对话 · {m.modelVersion||"规则降级模式"} · 暂无外部医学来源</small>{m.id&&<div className="feedback-row"><button onClick={()=>rate(m.id,"helpful")}>有帮助</button><button onClick={()=>rate(m.id,"not_helpful")}>无帮助</button><button onClick={()=>rate(m.id,"safety_issue")}>安全问题</button><button onClick={()=>rate(m.id,"factual_error")}>事实错误</button></div>}</div></div>)}</div>}
-  </div><div className="chat-dock"><div className="composer unified-composer"><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit()}}} placeholder="描述健康问题、症状，或上传健康资料" aria-label="向阿宝提问"/><div><button onClick={()=>setNotice("图片上传前会请求相册或文件授权")}>＋</button><button onClick={()=>setNotice("语音输入需要麦克风授权和语音服务配置")}>♩</button><span className="composer-spacer"/><button className="send-round" onClick={()=>submit()} disabled={sending||!text.trim()} aria-label="发送">{sending?"…":"↑"}</button></div></div><p className="boundary">内容仅供健康信息参考，不能替代专业医生诊断；紧急情况请立即联系急救或前往急诊。</p></div></div>
+function PageHeader({ kicker, title, description }: { kicker: string; title: string; description: string }) {
+  return <header className="page-header"><span>{kicker}</span><h1>{title}</h1><p>{description}</p></header>;
 }
 
-function profileText(subject:any){try{return JSON.parse(subject?.profileJson||"{}").profileText||""}catch{return ""}}
-
-function SubjectEditModal({subject,close,reload,setMember,setNotice}:any){
-  const [name,setName]=useState(subject.name);const [description,setDescription]=useState(profileText(subject));const [note,setNote]=useState("");const [selectedFiles,setSelectedFiles]=useState<File[]>([]);const [saving,setSaving]=useState(false);
-  const save=async()=>{if(!name.trim()||saving)return;if(!window.confirm(`是否确认修改“${subject.name}”的健康档案？`))return;setSaving(true);try{await action({action:"update_subject",subjectId:subject.id,name:name.trim(),profileText:description});if(note.trim())await action({action:"create_record",subjectId:subject.id,type:"note",title:note.trim(),value:{note:note.trim()},sourceType:"user_input",qualityStatus:"user_confirmed"});if(selectedFiles.length){await action({action:"set_consent",subjectId:subject.id,scope:"media_processing",purpose:"将用户选择的健康资料保存到对应人物档案",status:"granted"});for(const file of selectedFiles){const form=new FormData();form.append("file",file);form.append("subjectId",subject.id);const response=await fetch("/api/uploads",{method:"POST",body:form});if(!response.ok)throw new Error("upload_failed")}}await reload();setMember(name.trim());setNotice("人物档案已修改并保存");close()}catch{setNotice("修改未完成，请检查文件格式或稍后重试")}finally{setSaving(false)}};
-  return <div className="overlay" onClick={close}><section className="modal subject-editor" onClick={e=>e.stopPropagation()}><button className="close" onClick={close}>×</button><span className="modal-kicker">修改人物档案</span><h2>{subject.name}</h2><label><b>人物名称</b><input value={name} onChange={e=>setName(e.target.value)} maxLength={40}/></label><label><b>档案说明</b><textarea value={description} onChange={e=>setDescription(e.target.value)} maxLength={4000} placeholder="填写既往情况、关注事项或档案说明"/></label><label><b>新增文本记录</b><textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="可选：添加一条健康记录"/></label><label className="file-picker"><b>添加文件或图片</b><input type="file" accept="image/*,.pdf" multiple onChange={e=>setSelectedFiles(Array.from(e.target.files??[]))}/><span>{selectedFiles.length?`已选择 ${selectedFiles.length} 个文件`:`支持图片与 PDF，单个文件不超过 10MB`}</span></label><div className="editor-actions"><button onClick={close}>取消</button><button className="primary" disabled={saving} onClick={save}>{saving?"保存中":"确认修改"}</button></div></section></div>
+function PrivacyModal({ close, subjectId, reload, setNotice }: { close: () => void; subjectId: string; reload: () => Promise<void>; setNotice: SetNotice }) {
+  const setPermission = async (status: string) => {
+    try {
+      await request({ action: "set_consent", subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status });
+      await reload();
+      setNotice(status === "granted" ? "第三方 AI 处理授权已记录" : "授权已撤回，新的内容不会发送给第三方 AI");
+    } catch { setNotice("授权状态暂时无法保存"); }
+  };
+  const deleteAccount = async () => {
+    if (!window.confirm("确定删除账号及全部数据吗？此操作无法恢复。")) return;
+    const response = await fetch("/api/product?resource=account", { method: "DELETE" });
+    if (response.ok) window.location.href = "/signout-with-chatgpt?return_to=/";
+    else setNotice("账号暂时无法删除");
+  };
+  return <div className="overlay"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+    <button className="close-button" onClick={close} aria-label="关闭">×</button>
+    <span className="modal-kicker">数据与隐私</span><h2 id="privacy-title">你的内容由你控制</h2>
+    <p>只有在你授权后，当前问题和必要的最近对话才会发送给 DeepSeek API。生活偏好和建议记录保存在你的账号下。</p>
+    <div className="permission"><span><b>DeepSeek 内容处理</b><small>用于生成生活方式建议</small></span><div><button onClick={() => setPermission("granted")}>授权</button><button onClick={() => setPermission("revoked")}>撤回</button></div></div>
+    <div className="modal-actions"><button className="danger-button" onClick={deleteAccount}>删除账号及全部数据</button><button className="primary-button" onClick={close}>完成</button></div>
+  </section></div>;
 }
 
-function ArchivePage({member,setMember,setNotice,subjectId,bootstrap,reload}:any){
-  const [familyName,setFamilyName]=useState("");const [editing,setEditing]=useState<any>(null);const subjects=bootstrap?.subjects??[];const subject=subjects.find((s:any)=>s.id===subjectId);const records=(bootstrap?.records??[]).filter((r:any)=>r.subjectId===subjectId);const attachments=(bootstrap?.uploads??[]).filter((u:any)=>u.subjectId===subjectId);const pending=subjects.filter((s:any)=>s.authorizationStatus==="pending");
-  const addFamily=async()=>{if(!familyName.trim())return;try{await action({action:"create_subject",name:familyName.trim(),relation:"family"});setFamilyName("");await reload();setNotice("家庭成员已创建为待授权状态")}catch{setNotice("家庭成员未创建")}};
-  const cancelFamily=async(item:any)=>{if(!window.confirm(`是否取消“${item.name}”的待授权申请？`))return;try{await action({action:"cancel_subject",subjectId:item.id});await reload();setNotice("待授权成员已取消并移除")}catch{setNotice("取消失败，请稍后重试")}};
-  const removeSubject=async()=>{if(!subject)return;if(subject.relation==="self"){setNotice("本人档案属于账号主体，请在隐私设置中使用“删除账号及全部数据”");return}if(!window.confirm(`是否删除“${subject.name}”及其全部健康记录、对话和附件？删除后无法恢复。`))return;try{await action({action:"delete_subject",subjectId:subject.id});setMember("我");await reload();setNotice("人物及其全部档案已删除")}catch{setNotice("人物档案未删除，请稍后重试")}};
-  return <div className="page archive-page"><PageIntro kicker="个人与家庭健康档案" title="管理你和家人的健康资料" desc="选择人物后查看只读档案；修改和删除都需要再次确认。" icon="▣"/><SubjectBar member={member} setMember={setMember} subjects={subjects}/><section className="family-create"><input value={familyName} onChange={e=>setFamilyName(e.target.value)} placeholder="家庭成员姓名或称呼"/><button onClick={addFamily}>创建待授权成员</button></section>{pending.map((item:any)=><section className="pending-member" key={item.id}><div><b>{item.name}</b><span>等待确认管理权限</span></div><div className="pending-actions"><button onClick={async()=>{if(!window.confirm(`是否确认你有权管理“${item.name}”的健康资料？`))return;await action({action:"authorize_subject",subjectId:item.id,confirmed:true});await reload();setNotice("家庭成员授权已记录")}}>确认授权</button><button className="cancel-auth" onClick={()=>cancelFamily(item)}>取消授权</button></div></section>)}{subject&&<section className="subject-showcase"><header><div><span>人物</span><h2>{subject.name}</h2></div><em>只读档案</em></header><div className="showcase-description"><b>档案说明</b><p>{profileText(subject)||"暂无人物说明。点击右下角“修改”后可补充文本、文件或图片。"}</p></div><div className="showcase-grid"><section><b>健康记录</b>{records.length?<div className="showcase-list">{records.map((record:any)=><article key={record.id}><i>▣</i><span><strong>{record.title}</strong><small>{record.sourceType} · {new Date(record.occurredAt).toLocaleDateString()}</small></span></article>)}</div>:<p>暂无健康记录</p>}</section><section><b>文件与图片</b>{attachments.length?<div className="showcase-list">{attachments.map((file:any)=><article key={file.id}><i>{file.contentType.startsWith("image/")?"▧":"▤"}</i><span><strong>{file.fileName}</strong><small>{file.status} · {new Date(file.createdAt).toLocaleDateString()}</small></span></article>)}</div>:<p>暂无文件或图片</p>}</section></div><footer><span>{subject.relation==="self"?"本人主体删除需前往隐私设置":"删除人物会同时移除其记录、对话与附件"}</span><div><button onClick={()=>setEditing(subject)}>修改</button><button className="showcase-delete" onClick={removeSubject}>删除</button></div></footer></section>}{editing&&<SubjectEditModal subject={editing} close={()=>setEditing(null)} reload={reload} setMember={setMember} setNotice={setNotice}/>}</div>
+type HistoryRow = { id: string; title: string; summary?: string | null; updatedAt: string };
+
+function HistoryModal({ close, openConversation }: { close: () => void; openConversation: (id: string) => Promise<void> }) {
+  const [query, setQuery] = useState("");
+  const [rows, setRows] = useState<HistoryRow[]>([]);
+  const search = async (value = query) => {
+    const response = await fetch(`/api/product?resource=history&q=${encodeURIComponent(value)}`);
+    if (response.ok) setRows((await response.json()).conversations ?? []);
+  };
+  useEffect(() => {
+    void fetch("/api/product?resource=history&q=").then(async (response) => {
+      if (response.ok) setRows(((await response.json()) as { conversations?: HistoryRow[] }).conversations ?? []);
+    });
+  }, []);
+  return <div className="overlay"><section className="modal history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <button className="close-button" onClick={close} aria-label="关闭">×</button>
+    <span className="modal-kicker">建议记录</span><h2 id="history-title">找回以前的生活建议</h2>
+    <label className="search-field"><span>搜索关键词</span><input value={query} onChange={(event) => { setQuery(event.target.value); void search(event.target.value); }} placeholder="例如：睡眠、早餐、运动" /></label>
+    {rows.length ? <div className="history-list">{rows.map((row) => <button key={row.id} onClick={() => openConversation(row.id)}><b>{row.title}</b><span>{row.summary || "暂无摘要"}</span><small>{new Date(row.updatedAt).toLocaleString()}</small></button>)}</div> : <div className="history-empty"><Icon name="history" /><b>暂无匹配记录</b><span>完成一次生活建议对话后，可以在这里按关键词查找。</span></div>}
+  </section></div>;
 }
 
-function GoalPage({setNotice,subjectId,bootstrap,reload}:any){const [type,setType]=useState("运动");const [title,setTitle]=useState("");const goals=(bootstrap?.goals??[]).filter((g:any)=>g.subjectId===subjectId);const create=async()=>{if(!subjectId||!title.trim())return;try{await action({action:"create_goal",subjectId,type,title:title.trim(),plan:{cycle:"weekly",dailyAction:"待用户编辑",checkin:"manual"},reminder:{enabled:false,time:null,frequency:"user_controlled",channel:null}});setTitle("");await reload();setNotice("目标已创建；启用提醒前仍需单独确认通知权限")}catch{setNotice("目标暂未保存")}};return <div className="page"><PageIntro kicker="健康陪伴" title="把健康目标变成可调整的日常计划" desc="目标说明、周期、行动、打卡和提醒都由你控制，可随时编辑、暂停或关闭。" icon="◎"/><section className="goal-builder"><div className="goal-types">{["运动","饮食","睡眠"].map(x=><button className={type===x?"selected":""} key={x} onClick={()=>setType(x)}>{x}</button>)}</div><input value={title} onChange={e=>setTitle(e.target.value)} placeholder={`输入${type}目标，例如“建立规律睡眠时间”`}/><button className="primary" onClick={create}>创建目标</button></section>{goals.length?<div className="goal-list">{goals.map((g:any)=><section className="plan-card" key={g.id}><div className="plan-head"><div><span>{g.status}</span><h2>{g.title}</h2><p>{g.type} · 周期、行动与提醒均可编辑</p></div><button onClick={()=>setNotice("暂停与终止状态接口将在下一次状态更新中写入")}>暂停计划</button></div><button className="primary checkin" onClick={async()=>{await action({action:"checkin",goalId:g.id});setNotice("今日打卡已记录并进入审计日志")}}>完成今日打卡</button></section>)}</div>:<section className="empty-state goal-empty"><i>◎</i><h2>还没有健康目标</h2><p>从运动、饮食或睡眠开始；系统不会生成疾病治疗、药物调整或极端计划。</p></section>}<section className="plain-note"><b>安全约束</b><span>涉及疾病治疗、药物调整或极端饮食运动的目标，会触发专业审核或就医提示。</span></section></div>}
+function LogoMark() { return <span className="logo-mark" aria-hidden="true">阿</span>; }
 
-function DevicePage({setNotice,subjectId,bootstrap,reload}:any){const device=(bootstrap?.devices??[]).find((d:any)=>d.subjectId===subjectId);const update=async(status:string)=>{try{await action({action:"device_status",subjectId,provider:"pending_provider",scopes:["activity","heart_rate","sleep"],status});await reload();setNotice(status==="pending_provider"?"授权范围已记录；仍需选择并接入真实设备平台":"设备连接状态已更新")}catch{setNotice("设备状态未保存")}};return <div className="page"><PageIntro kicker="智能设备数据接入" title="经你授权，汇总连续健康指标" desc="查看授权范围、同步状态与最近同步时间；解绑或重新授权始终由你控制。" icon="⌁"/><section className="device-card"><div className="device-icon">⌁</div><div><h2>{device?"设备接入等待服务商":"尚未连接健康设备"}</h2><p>{device?`状态：${device.status}。由于尚未配置设备平台，不会显示或推断任何健康数据。`:"连接前逐项说明活动、心率、睡眠数据的用途。品牌与指标以真实合作接口为准。"}</p></div><button className={device?"":"primary"} onClick={()=>update(device?"disconnected":"pending_provider")}>{device?"解除授权":"确认授权范围"}</button></section><div className="device-features">{[["同步状态","真实接入后显示最近同步时间与失败原因"],["数据标准化","处理单位、时区、重复记录与异常值"],["质量说明","标记缺失、延迟、异常和来源设备"],["谨慎解读","不把单次消费级设备读数当作诊断结论"]].map(x=><div key={x[0]}><i>✓</i><b>{x[0]}</b><span>{x[1]}</span></div>)}</div></div>}
-
-function ServicePage({setNotice,subjectId}:any){const choose=async(type:string)=>{try{const result=await action({action:"service_intent",subjectId,serviceType:type,consent:{sharedFields:[],confirmed:false}});setNotice(result.externalIntegration?"正在进入服务确认":"需求已保存；尚未配置服务提供方，不会跳转、共享或收费")}catch{setNotice("服务需求未保存，请稍后重试")}};return <div className="page"><PageIntro kicker="医疗健康服务连接" title="在 AI 能力之外，连接适当的专业服务" desc="具体服务按地区、机构和账户权限展示；提供方、费用、流程与资料共享范围会在跳转前说明。" icon="✚"/><div className="service-grid">{[["◌","在线问诊","online_consultation","与真人医生进行专业咨询"],["▢","预约挂号","appointment","查询并进入可用的挂号路径"],["♙","云陪诊","cloud_companion","获取就医流程陪伴服务"]].map(x=><section key={x[1]}><i>{x[0]}</i><h2>{x[1]}</h2><p>{x[3]}</p><ul><li>确认服务提供方</li><li>确认费用与预计流程</li><li>确认资料共享范围</li></ul><button onClick={()=>choose(x[2])}>登记服务需求</button></section>)}</div><section className="confirm-band"><i>✓</i><div><b>当前不会自动跳转、共享资料或发起交易</b><span>未接入真实服务商前，只保存用户意向；后续必须再次确认提供方、费用和共享字段。</span></div></section><section className="emergency"><b>出现疑似急症？</b><span>请立即联系当地急救电话或前往急诊，不要等待在线服务。</span></section></div>}
-
-function PrivacyModal({close,setNotice,subjectId,reload}:any){const setPermission=async(scope:string,status:string)=>{try{await action({action:"set_consent",subjectId,scope,purpose:scope==="external_ai_processing"?"将必要的健康对话发送给 DeepSeek API 生成回答":"提供对应健康功能",status});await reload?.();setNotice(status==="granted"?"授权已记录，可随时撤回":"授权已撤回，后续访问将被拒绝")}catch{setNotice("授权状态未保存")}};const deleteAccount=async()=>{if(!window.confirm("确定删除账号及全部健康数据吗？此操作无法恢复。"))return;const response=await fetch("/api/product?resource=account",{method:"DELETE"});if(response.ok){window.location.href="/signout-with-chatgpt?return_to=/"}else setNotice("账号未删除，请稍后重试")};return <div className="overlay" onClick={close}><section className="modal" onClick={e=>e.stopPropagation()}><button className="close" onClick={close}>×</button><span className="modal-kicker">设置与隐私</span><h2>健康数据由你控制</h2><p>首次使用健康数据、第三方 AI、相册、麦克风或设备数据时，会分别说明用途并记录授权。</p>{[["DeepSeek 对话处理","external_ai_processing"],["健康档案","health_profile"],["相册与文件","media_processing"],["麦克风","microphone"],["设备数据","device_data"]].map(x=><div className="permission" key={x[0]}><span>{x[0]}</span><div><button onClick={()=>setPermission(x[1],"granted")}>授权</button><button onClick={()=>setPermission(x[1],"revoked")}>撤回</button></div></div>)}<div className="privacy-actions"><button onClick={()=>setNotice("数据导出生成和字段更正流程仍需补充")}>导出与更正</button><button onClick={()=>setNotice("单条记录可在健康档案中删除，并提示关联影响")}>删除数据</button><a href="/signout-with-chatgpt?return_to=/">退出登录</a></div><button className="danger wide" onClick={deleteAccount}>删除账号及全部数据</button><button className="primary wide" onClick={close}>完成</button></section></div>}
-
-function HistoryModal({close,go,openConversation,subjectId}:any){const [q,setQ]=useState("");const [rows,setRows]=useState<any[]>([]);const search=async(value=q)=>{const response=await fetch(`/api/product?resource=history&q=${encodeURIComponent(value)}&subjectId=${encodeURIComponent(subjectId||"")}`);if(response.ok)setRows((await response.json()).conversations??[])};useEffect(()=>{search("")},[]);return <div className="overlay" onClick={close}><section className="modal history" onClick={e=>e.stopPropagation()}><button className="close" onClick={close}>×</button><span className="modal-kicker">对话记忆与检索</span><h2>查找历史健康信息</h2><label><i>⌕</i><input autoFocus value={q} onChange={e=>{setQ(e.target.value);search(e.target.value)}} placeholder="按关键词搜索"/></label><div className="filters"><button>当前健康主体</button><button>按更新时间</button><button>对话记录</button></div>{rows.length?<div className="history-list">{rows.map((r:any)=><button key={r.id} onClick={()=>openConversation(r.id)}><b>{r.title}</b><span>{r.summary||"暂无摘要"}</span><small>{new Date(r.updatedAt).toLocaleString()}</small></button>)}</div>:<div className="history-empty"><i>⌕</i><b>暂无匹配记录</b><span>完成问答后，可按关键词和健康主体检索。</span></div>}<button className="primary wide" onClick={()=>{close();go("健康问答")}}>开始新的健康问答</button></section></div>}
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    chat: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /><path d="M8 9h8M8 13h5" /></>,
+    sliders: <><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" /><path d="M1 14h6M9 8h6M17 16h6" /></>,
+    target: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 3v3M21 12h-3" /></>,
+    history: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>,
+    privacy: <><path d="M12 3 5 6v5c0 4.4 2.8 8.4 7 10 4.2-1.6 7-5.6 7-10V6z" /><path d="m9 12 2 2 4-4" /></>,
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+    send: <><path d="m22 2-7 20-4-9-9-4z" /><path d="M22 2 11 13" /></>,
+    check: <path d="m5 12 4 4L19 6" />,
+  };
+  return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+}

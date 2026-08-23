@@ -39,3 +39,14 @@ test("keeps only lifestyle-facing product language",async()=>{
   assert.match(page,/只提供生活方式推荐/);
   assert.match(page,/不会询问或使用疾病、检查和药品信息/);
 });
+
+test("ships the elephant identity and accessible motion states",async()=>{
+  const page=await readFile(new URL("../app/page.tsx",import.meta.url),"utf8");
+  const motion=await readFile(new URL("../app/motion.css",import.meta.url),"utf8");
+  assert.match(page,/阿宝正在整理生活建议/);
+  assert.match(page,/is-success/);
+  assert.match(page,/is-complete/);
+  assert.match(motion,/abao-elephant-avatar\.png/);
+  assert.match(motion,/prefers-reduced-motion/);
+  assert.match(motion,/thinking-dot/);
+});

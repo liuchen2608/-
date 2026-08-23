@@ -252,6 +252,11 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
             ))}
           </div>
         )}
+        {sending && <div className="thinking-card" role="status" aria-live="polite">
+          <LogoMark />
+          <span><b>阿宝正在整理生活建议</b><small>会先从一件容易开始的小事说起</small></span>
+          <i className="thinking-dots" aria-hidden="true"><i /><i /><i /></i>
+        </div>}
       </div>
       <div className="chat-dock">
         <div className="composer">
@@ -280,13 +285,16 @@ function PreferencePage({ subject, reload, setNotice }: { subject?: Subject; rel
   const [availableMinutes, setAvailableMinutes] = useState(current.availableMinutes ?? "20");
   const [lifestyleGoal, setLifestyleGoal] = useState(current.lifestyleGoal ?? "");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const save = async () => {
     if (!subject?.id || saving) return;
     setSaving(true);
+    setSaved(false);
     try {
       await request({ action: "update_preferences", subjectId: subject.id, preferences: { wakeTime, sleepTime, mealStyle, exerciseLevel, availableMinutes, lifestyleGoal } });
       await reload();
+      setSaved(true);
       setNotice("生活偏好已保存，后续建议会优先参考这些信息");
     } catch {
       setNotice("生活偏好暂时无法保存");
@@ -304,7 +312,7 @@ function PreferencePage({ subject, reload, setNotice }: { subject?: Subject; rel
         <label><span>每天可活动时间</span><select value={availableMinutes} onChange={(event) => setAvailableMinutes(event.target.value)}><option value="10">10 分钟</option><option value="20">20 分钟</option><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="60">60 分钟</option></select></label>
         <label className="full-field"><span>最想改善的生活目标</span><textarea value={lifestyleGoal} onChange={(event) => setLifestyleGoal(event.target.value)} maxLength={200} placeholder="例如：希望晚上 11 点前放下手机并准备休息" /><small>{lifestyleGoal.length}/200</small></label>
       </div>
-      <div className="form-actions"><p>不会询问或使用疾病、检查和药品信息来生成计划。</p><button className="primary-button" onClick={save} disabled={saving}>{saving ? "保存中" : "保存生活偏好"}</button></div>
+      <div className="form-actions"><p>不会询问或使用疾病、检查和药品信息来生成计划。</p><button className={`primary-button ${saved ? "is-success" : ""}`} onClick={save} disabled={saving}>{saving ? "保存中" : saved ? "已保存" : "保存生活偏好"}</button></div>
     </section>
   </div>;
 }
@@ -312,6 +320,7 @@ function PreferencePage({ subject, reload, setNotice }: { subject?: Subject; rel
 function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string; goals: Goal[]; reload: () => Promise<void>; setNotice: SetNotice }) {
   const [type, setType] = useState("作息");
   const [title, setTitle] = useState("");
+  const [completed, setCompleted] = useState<Set<string>>(() => new Set());
   const create = async () => {
     if (!subjectId || !title.trim()) return;
     try {
@@ -330,7 +339,11 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
     </section>
     {goals.length ? <div className="goal-list">{goals.map((goal) => <article className="goal-card" key={goal.id}>
       <div><span>{goal.type}</span><h2>{goal.title}</h2><p>今天完成后点一下打卡，不需要补做或追求满分。</p></div>
-      <button onClick={async () => { await request({ action: "checkin", goalId: goal.id }); setNotice("今天的行动已记录"); }}><Icon name="check" />完成今日行动</button>
+      <button className={completed.has(goal.id) ? "is-complete" : ""} disabled={completed.has(goal.id)} onClick={async () => {
+        await request({ action: "checkin", goalId: goal.id });
+        setCompleted((current) => new Set(current).add(goal.id));
+        setNotice("今天的行动已记录");
+      }}><Icon name="check" />{completed.has(goal.id) ? "今天已完成" : "完成今日行动"}</button>
     </article>)}</div> : <section className="empty-card"><Icon name="target" /><h2>还没有习惯计划</h2><p>从一项十分钟内可以完成的小行动开始。</p></section>}
   </div>;
 }
@@ -384,7 +397,7 @@ function HistoryModal({ close, openConversation }: { close: () => void; openConv
   </section></div>;
 }
 
-function LogoMark() { return <span className="logo-mark" aria-hidden="true">阿</span>; }
+function LogoMark() { return <span className="logo-mark" aria-hidden="true" />; }
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {

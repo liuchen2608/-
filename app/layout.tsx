@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { getChatGPTUser } from "./chatgpt-auth";
 import "./globals.css";
 import "./motion.css";
@@ -7,12 +6,9 @@ import "./auth.css";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const image = `${protocol}://${host}/og-v2.png`;
-  const title = "大象阿宝｜健康生活助手";
+export function generateMetadata(): Metadata {
+  const image = "https://daxiang-abao-health.caokhoiq2.chatgpt.site/og-editorial.png";
+  const title = "大象阿宝｜温和、可执行的健康生活助手";
   const description = "面向普通成年人的生活方式推荐助手，提供简单、温和、可执行的饮食、作息、运动和习惯建议。";
   return {
     title,

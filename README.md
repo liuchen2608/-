@@ -1,4 +1,10 @@
-# vinext-starter
+# 大象阿宝
+
+**[立即打开大象阿宝](https://daxiang-abao-health.caokhoiq2.chatgpt.site)**
+
+面向个人与家庭的 AI 健康朋友，提供健康问答、报告解读、健康档案、目标管理与医疗服务连接。
+
+## 开发说明
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and

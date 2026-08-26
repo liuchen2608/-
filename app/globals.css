@@ -130,3 +130,68 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .editorial-footer{padding:42px 22px;grid-template-columns:1fr;gap:22px}.editorial-footer p{text-align:left}
   .signed-out-page{padding:16px}.signed-out-card{padding:38px 26px}
 }
+
+/* Visual-only treatment of the existing product screens. */
+.app-shell{--sidebar:236px;background:var(--editorial-parchment)}
+.sidebar{background:var(--editorial-dark);border-right-color:rgba(241,233,220,.12);color:var(--editorial-light)}
+.sidebar .brand{color:var(--editorial-light)}
+.sidebar .brand:hover,.sidebar nav button:hover,.sidebar-foot button:hover{background:rgba(241,233,220,.07);color:var(--editorial-light)}
+.sidebar .brand small,.sidebar nav button,.sidebar-foot button{color:rgba(241,233,220,.6)}
+.sidebar .logo-mark{border:1px solid rgba(241,233,220,.34);background:transparent;color:var(--editorial-light);box-shadow:none}
+.sidebar .collapse-button{border-color:rgba(241,233,220,.18);background:transparent;color:rgba(241,233,220,.66);border-radius:50%}
+.sidebar nav button,.sidebar-foot button{border-radius:0}
+.sidebar nav button.active{background:var(--editorial-parchment);color:var(--editorial-ink);box-shadow:none}
+.sidebar-foot{border-top-color:rgba(241,233,220,.14)}
+.topbar{background:rgba(216,203,184,.92);border-bottom-color:rgba(23,19,15,.16)}
+.product-title{font-family:Georgia,"Songti SC","Noto Serif SC",serif;font-weight:400;letter-spacing:.02em}
+.scope-badge,.icon-button,.mobile-menu{border-radius:0}
+.avatar{background:var(--editorial-dark);border-color:var(--editorial-dark)}
+
+.chat-page:has(.welcome){position:relative;isolation:isolate;color:var(--editorial-light);background:#17120f url('/hero-editorial.png') center 48%/cover no-repeat}
+.chat-page:has(.welcome)::before{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(90deg,rgba(12,9,7,.91) 0%,rgba(15,11,8,.48) 48%,rgba(12,9,7,.7) 100%),linear-gradient(180deg,rgba(10,8,6,.2),rgba(10,8,6,.8))}
+.chat-page:has(.welcome)::after{content:"";position:absolute;inset:18px;border:1px solid rgba(241,233,220,.12);pointer-events:none}
+.chat-page:has(.welcome) .chat-scroll{max-width:none;padding:clamp(48px,7vw,108px) clamp(30px,6.5vw,104px) 36px;display:flex;align-items:center}
+.chat-page:has(.welcome) .welcome{width:min(1180px,100%);max-width:none;margin:auto;display:grid;grid-template-columns:minmax(300px,.85fr) minmax(420px,1.15fr);grid-template-rows:auto auto auto 1fr auto;column-gap:clamp(46px,8vw,130px);align-items:start}
+.chat-page:has(.welcome) .welcome-mark{grid-column:1;grid-row:1;margin:0 0 22px}
+.chat-page:has(.welcome) .welcome-mark .logo-mark{width:46px;height:46px;border:1px solid rgba(241,233,220,.42);border-radius:50%;background:transparent;color:var(--editorial-light);box-shadow:none;font-size:17px}
+.chat-page:has(.welcome) .eyebrow{grid-column:1;grid-row:2;color:var(--editorial-brass);font-size:10px;letter-spacing:.24em}
+.chat-page:has(.welcome) .welcome h1{grid-column:1;grid-row:3;margin:18px 0 22px;color:var(--editorial-light);font-size:clamp(60px,7.4vw,112px);font-weight:400;line-height:.88;letter-spacing:-.075em;text-shadow:0 10px 46px rgba(0,0,0,.3)}
+.chat-page:has(.welcome) .welcome>p{grid-column:1;grid-row:4;max-width:460px;margin:0;color:rgba(241,233,220,.76);font-family:Georgia,"Noto Serif SC",serif;font-size:15px;line-height:1.9}
+.chat-page:has(.welcome) .prompt-grid{grid-column:2;grid-row:1/5;align-self:end;grid-template-columns:1fr;background:rgba(230,218,200,.94);padding:10px;gap:0;box-shadow:0 28px 80px rgba(0,0,0,.26);backdrop-filter:blur(14px)}
+.chat-page:has(.welcome) .prompt-grid button{min-height:94px;padding:17px 18px;border:0;border-bottom:1px solid rgba(23,19,15,.16);border-radius:0;background:transparent;color:var(--editorial-ink);box-shadow:none}
+.chat-page:has(.welcome) .prompt-grid button:last-child{border-bottom:0}
+.chat-page:has(.welcome) .prompt-grid button:hover{transform:none;padding-left:24px;background:rgba(255,255,255,.2)}
+.chat-page:has(.welcome) .prompt-grid b{font-family:Georgia,"Noto Serif SC",serif;font-size:18px;font-weight:400}
+.chat-page:has(.welcome) .prompt-grid small{font-size:11px;color:#6b5f50}
+.chat-page:has(.welcome) .prompt-arrow{color:var(--editorial-brass)}
+.chat-page:has(.welcome) .scope-note{grid-column:1/3;grid-row:5;margin:32px 0 0;padding:12px 0;border-top:1px solid rgba(241,233,220,.22);border-radius:0;background:transparent;color:rgba(241,233,220,.58)}
+.chat-page:has(.welcome) .chat-dock{background:linear-gradient(180deg,rgba(12,9,7,0),rgba(12,9,7,.76) 30%)}
+.chat-page:has(.welcome) .composer{background:rgba(232,221,205,.96);border:0;border-radius:0;box-shadow:0 22px 65px rgba(0,0,0,.28)}
+.chat-page:has(.welcome) .boundary-text{color:rgba(241,233,220,.58)}
+
+.page{max-width:1040px}
+.page-header>span,.modal-kicker,.eyebrow{letter-spacing:.18em}
+.page-header h1{font-size:clamp(48px,6vw,78px);letter-spacing:-.055em}
+.form-card,.goal-builder,.goal-card,.empty-card,.modal,.permission,.field-grid input,.field-grid select,.field-grid textarea,.goal-builder input,.search-field input,.history-list button,.composer,.send-button,.primary-button,.danger-button,.goal-card button,.feedback-row button{border-radius:0}
+.form-card,.goal-builder,.goal-card,.empty-card{box-shadow:0 16px 45px rgba(23,19,15,.08)}
+
+@media (max-width:1050px){
+  .chat-page:has(.welcome) .welcome{grid-template-columns:minmax(260px,.8fr) minmax(390px,1.2fr);column-gap:44px}
+  .chat-page:has(.welcome) .welcome h1{font-size:clamp(56px,7.4vw,82px)}
+}
+@media (max-width:820px){
+  .chat-page:has(.welcome) .chat-scroll{padding:54px 24px 28px;align-items:flex-start}
+  .chat-page:has(.welcome) .welcome{display:block}
+  .chat-page:has(.welcome) .welcome h1{max-width:520px;font-size:clamp(58px,13vw,84px)}
+  .chat-page:has(.welcome) .welcome>p{margin-bottom:28px}
+  .chat-page:has(.welcome) .prompt-grid{width:100%}
+  .chat-page:has(.welcome) .scope-note{margin-top:24px}
+}
+@media (max-width:760px){
+  .sidebar{background:var(--editorial-dark)}
+  .chat-page:has(.welcome)::after{inset:9px}
+  .chat-page:has(.welcome) .chat-scroll{padding:38px 18px 20px}
+  .chat-page:has(.welcome) .welcome-mark{margin-bottom:18px}
+  .chat-page:has(.welcome) .welcome h1{font-size:clamp(50px,17vw,72px)}
+  .chat-page:has(.welcome) .prompt-grid button{min-height:84px}
+}

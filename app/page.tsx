@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type PageName = "首页" | "生活建议" | "生活偏好" | "习惯计划";
+type PageName = "生活建议" | "生活偏好" | "习惯计划";
 type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
@@ -43,7 +43,7 @@ const fetchBootstrap = async () => {
 };
 
 export default function Home() {
-  const [page, setPage] = useState<PageName>("首页");
+  const [page, setPage] = useState<PageName>("生活建议");
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && (localStorage.getItem("abao-sidebar-collapsed") ?? String(window.innerWidth < 760)) === "true");
   const [notice, setNotice] = useState("");
   const [privacy, setPrivacy] = useState(false);
@@ -123,10 +123,10 @@ export default function Home() {
   };
 
   return (
-    <main className={`app-shell ${collapsed ? "is-collapsed" : ""} ${page === "首页" ? "home-mode" : ""}`}>
+    <main className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
-          <button className="brand" onClick={() => go("首页")} aria-label="返回大象阿宝首页">
+          <button className="brand" onClick={newConversation} aria-label="返回大象阿宝首页">
             <LogoMark />
             <span><b>大象阿宝</b><small>健康生活助手</small></span>
           </button>
@@ -153,7 +153,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <button className="mobile-menu" onClick={toggle} aria-label="切换导航"><Icon name="menu" /></button>
-          <button className="product-title" onClick={() => go("首页")}>大象阿宝 <span>健康生活助手</span></button>
+          <button className="product-title" onClick={newConversation}>大象阿宝 <span>健康生活助手</span></button>
           <div className="top-actions">
             <span className="scope-badge">只提供生活方式推荐</span>
             <button className="icon-button" onClick={() => setHistory(true)} aria-label="打开建议记录"><Icon name="history" /></button>
@@ -161,8 +161,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className={`content ${page === "生活建议" ? "chat-content" : ""} ${page === "首页" ? "home-content" : ""}`}>
-          {page === "首页" && <EditorialHome go={go} onStart={begin} setNotice={setNotice} />}
+        <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
           {page === "生活建议" && <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} setNotice={setNotice} />}
           {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
           {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
@@ -174,43 +173,6 @@ export default function Home() {
       {history && <HistoryModal close={() => setHistory(false)} openConversation={openConversation} />}
     </main>
   );
-}
-
-function EditorialHome({ go, onStart, setNotice }: { go: (page: PageName) => void; onStart: (text: string) => Promise<void>; setNotice: SetNotice }) {
-  const [question, setQuestion] = useState("");
-  const submit = () => {
-    const value = question.trim();
-    if (value) void onStart(value);
-  };
-  const services: Array<[string, string, string, PageName]> = [
-    ["01", "安排今天", "把饮食、活动与休息排成简单可做的一天", "生活建议"],
-    ["02", "理解偏好", "只保存你主动填写的目标、限制与生活场景", "生活偏好"],
-    ["03", "建立习惯", "从足够小的一步开始，按你的节奏持续调整", "习惯计划"],
-  ];
-
-  return <div className="editorial-home">
-    <section className="editorial-hero">
-      <header className="editorial-nav">
-        <button className="editorial-brand" onClick={() => go("首页")} aria-label="大象阿宝首页"><LogoMark /><b>大象阿宝</b></button>
-        <nav aria-label="主要功能"><button onClick={() => go("生活建议")}>生活建议</button><button onClick={() => go("生活偏好")}>生活偏好</button><button onClick={() => go("习惯计划")}>习惯计划</button></nav>
-        <div className="editorial-nav-actions"><span>生活方式推荐</span><button onClick={() => go("生活建议")}>开始规划 <strong>↗</strong></button></div>
-      </header>
-      <div className="editorial-title-wrap"><span>温和地改变日常</span><h1>照顾日常<br/>从容生活</h1><span>始于今天的一小步</span></div>
-      <div className="editorial-bottom">
-        <p>你好，我是阿宝。告诉我你想改善的饮食、作息、运动或日常习惯。我们不追求极端计划，只把下一步变得清楚、温和、可以开始。</p>
-        <div className="editorial-ask"><div className="editorial-ask-head"><span>今天想改善什么？</span><small>LIFESTYLE COMPANION</small></div><textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} placeholder="例如：最近总是睡不好" aria-label="告诉阿宝你的生活目标"/><div className="editorial-suggestions"><button onClick={() => void onStart("帮我安排健康的一天")}>帮我安排健康的一天</button><button onClick={() => void onStart("给我一份新手运动计划")}>给我一份新手运动计划</button></div><div className="editorial-ask-foot"><button onClick={() => setNotice("阿宝只会读取你主动填写和保存的生活偏好")}>◇ 数据说明</button><button className="editorial-send" onClick={submit} disabled={!question.trim()}>生成建议 ↗</button></div></div>
-      </div>
-      <button className="editorial-scroll" onClick={() => document.getElementById("editorial-intro")?.scrollIntoView({ behavior: "smooth" })}>继续了解 <span>↓</span></button>
-    </section>
-
-    <section className="editorial-intro" id="editorial-intro">
-      <div><span>01 — 生活建议的另一种方式</span><h2>不是一次回答，<br/>是一套能坚持的生活节奏。</h2><p>阿宝把复杂的健康知识收进后台，只给你足够清楚的行动。建议会说明适用场景与边界，也会随着你的反馈继续调整。</p></div>
-      <aside><span>我们坚持</span><dl><div><dt>温和</dt><dd>不制造焦虑，不提供极端计划</dd></div><div><dt>具体</dt><dd>优先给出今天就能做的下一步</dd></div><div><dt>克制</dt><dd>只处理生活方式，不冒充医疗诊断</dd></div></dl></aside>
-    </section>
-
-    <section className="editorial-services"><header><span>02 — 从建议到习惯</span><h2>每一步，<br/>都更接近你的日常。</h2></header><div>{services.map(([index, title, description, target]) => <button key={index} onClick={() => go(target)}><small>{index}</small><span><b>{title}</b><em>{description}</em></span><strong>↗</strong></button>)}</div></section>
-    <footer className="editorial-footer"><div><LogoMark /><b>大象阿宝</b></div><p>大象阿宝只提供普通成年人饮食、作息、运动和日常习惯建议；如有健康疑虑，请咨询专业人员。</p><button onClick={() => go("生活建议")}>开始一次规划 ↗</button></footer>
-  </div>;
 }
 
 function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; setNotice: SetNotice }) {

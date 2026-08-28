@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent } from "./lib/ai-consent";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
 type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
 type Goal = { id: string; type: string; title: string };
-type Message = { id?: string; role: "user" | "assistant"; content: string; category?: string; responseType?: string };
+type Message = { id?: string; role: "user" | "assistant"; content: string; category?: string; responseType?: string; provider?: string; status?: string };
 type Conversation = { userMessage?: Message; assistantMessage?: Message; items?: Message[] };
 type BootstrapData = { subject?: Subject; consents?: Consent[]; goals?: Goal[] };
 type SetNotice = (message: string) => void;
@@ -94,32 +95,27 @@ export default function Home() {
       setNotice("建议记录暂时无法读取");
     }
   };
+  const authorizeDialogue = async () => {
+    // Refresh on every send so a withdrawal in another tab is not overwritten.
+    const fresh = await fetchBootstrap();
+    setBootstrap(fresh);
+    const activeSubjectId = fresh.subject?.id;
+    if (!activeSubjectId) throw new Error("profile_unavailable");
+    if (hasConversationConsent(fresh.consents ?? [], activeSubjectId)) return;
+    const latest = [...(fresh.consents ?? [])].reverse().find((item) => item.subjectId === activeSubjectId && item.scope === AI_CONVERSATION_SCOPE);
+    if (latest) return; // A declined/revoked grant stays off until changed in privacy settings.
+    const confirmed = window.confirm(AI_CONVERSATION_NOTICE);
+    await request({ action: "set_consent", subjectId: activeSubjectId, scope: AI_CONVERSATION_SCOPE, status: confirmed ? "granted" : "revoked" });
+    await load();
+  };
   const begin = async (text: string) => {
-    try {
-      if (!subjectId) throw new Error("profile_unavailable");
-      const latest = [...(bootstrap?.consents ?? [])]
-        .reverse()
-        .find((item: Consent) => item.subjectId === subjectId && item.scope === "external_ai_processing");
-      if (latest?.status !== "granted") {
-        const confirmed = window.confirm("为了从已审核的生活行动中选择今天的优先项，大象阿宝会将生活场景和你主动保存的生活偏好发送给 DeepSeek API，不会发送问题原文或对话历史。是否同意？你可以随时在数据与隐私中撤回授权。");
-        if (confirmed) {
-          await request({ action: "set_consent", subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status: "granted" });
-          await load();
-        } else {
-          setNotice("未授权第三方 AI 处理，本次将使用本地规则生成建议");
-        }
-      }
-      const created = await request<{ id: string }>({ action: "create_conversation", subjectId, title: text.slice(0, 30) });
-      const result = await request<Conversation>({ action: "send_message", conversationId: created.id, content: text, inputType: "text" });
-      setConversationId(created.id);
-      setConversation(result);
-      await load();
-    } catch {
-      setConversation(null);
-      setConversationId("");
-      setNotice("生活建议暂时无法生成，请重新登录或稍后重试");
-    }
-    go("生活建议");
+    const activeSubjectId = subjectId || (await fetchBootstrap()).subject?.id;
+    if (!activeSubjectId) throw new Error("profile_unavailable");
+    const created = await request<{ id: string }>({ action: "create_conversation", subjectId: activeSubjectId, title: text.slice(0, 30) });
+    const result = await request<Conversation>({ action: "send_message", conversationId: created.id, content: text, inputType: "text" });
+    setConversationId(created.id);
+    setConversation(result);
+    setPage("生活建议");
   };
 
   return (
@@ -162,7 +158,7 @@ export default function Home() {
         </header>
 
         <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
-          {page === "生活建议" && <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} setNotice={setNotice} />}
+          {page === "生活建议" && <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} setNotice={setNotice} />}
           {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
           {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
         </div>
@@ -175,27 +171,35 @@ export default function Home() {
   );
 }
 
-function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; setNotice: SetNotice }) {
+function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChange, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; setNotice: SetNotice }) {
   const [text, setText] = useState("");
   const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
   const [sending, setSending] = useState(false);
+  const [pendingText, setPendingText] = useState("");
 
   const submit = async (value?: string) => {
     const content = (value ?? text).trim();
     if (!content || sending) return;
     setSending(true);
-    setText("");
+    setPendingText(content);
+    setNotice("");
     try {
+      await onAuthorize();
       if (conversationId) {
         const result = await request<Required<Pick<Conversation, "userMessage" | "assistantMessage">>>({ action: "send_message", conversationId, content, inputType: "text" });
-        setItems((current) => [...current, result.userMessage, result.assistantMessage]);
+        const nextItems = [...items, result.userMessage, result.assistantMessage];
+        setItems(nextItems);
+        onChange(nextItems);
       } else {
         await onStart(content);
       }
+      setText("");
     } catch {
-      setNotice("生活建议暂时无法生成，请稍后重试");
+      setText(content);
+      setNotice("消息未能完成发送，输入已保留，请稍后重试或重新登录");
     } finally {
       setSending(false);
+      setPendingText("");
     }
   };
   const rate = async (messageId: string | undefined, type: string) => {
@@ -216,10 +220,10 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
             <div className="welcome-mark"><LogoMark /></div>
             <span className="eyebrow">今天从一件小事开始</span>
             <h1>你好，我是阿宝</h1>
-            <p>告诉我你想改善的饮食、作息、运动或日常习惯，我会给你一份简单、温和、可以马上开始的建议。</p>
+            <p>告诉我你想改善的饮食、作息、运动或日常习惯。授权后，我会通过 DeepSeek 和你聊清需求，再一起找到适合你的小行动。</p>
             <div className="prompt-grid">
               {prompts.map(([title, description]) => (
-                <button key={title} onClick={() => submit(title)}>
+                <button key={title} onClick={() => submit(title)} disabled={sending}>
                   <span><b>{title}</b><small>{description}</small></span><span className="prompt-arrow"><Icon name="arrow-right" /></span>
                 </button>
               ))}
@@ -235,7 +239,10 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
                 <LogoMark />
                 <div>
                   <span className="category">{message.category ?? "生活建议"}</span>
+                  {message.provider && <small className="reply-source">{message.provider === "deepseek" ? "DeepSeek 回复" : message.status === "unavailable" ? "DeepSeek 暂未连接 · 本地回复" : message.status === "consent_required" ? "尚未授权 DeepSeek · 本地回复" : "本地安全提示"}</small>}
                   <p>{message.content}</p>
+                  {message.status === "consent_required" && <small>可在“数据与隐私”中授权，开启连续需求对话。</small>}
+                  {message.status === "unavailable" && <small>本次未获得有效的 DeepSeek 回复，请稍后重试；持续失败时请联系管理员检查连接配置。</small>}
                   {message.id && <div className="feedback-row">
                     <span>这份建议怎么样？</span>
                     <button onClick={() => rate(message.id, "helpful")}>有帮助</button>
@@ -248,6 +255,7 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
             ))}
           </div>
         )}
+        {sending && <div className="user-message">{pendingText}</div>}
         {sending && <div className="thinking-card" role="status" aria-live="polite">
           <LogoMark />
           <span><b>阿宝正在整理生活建议</b><small>会先从一件容易开始的小事说起</small></span>
@@ -257,8 +265,8 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
       <div className="chat-dock">
         <div className="composer">
           <label htmlFor="advice-input">你想改善什么？</label>
-          <textarea id="advice-input" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); }
+          <textarea id="advice-input" value={text} disabled={sending} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); submit(); }
           }} placeholder="例如：我晚上总是很晚睡，想调整作息" maxLength={2000} />
           <div><small>{text.length}/2000</small><button className="send-button" onClick={() => submit()} disabled={sending || !text.trim()} aria-label="发送问题"><Icon name="send" />{sending ? "生成中" : "发送"}</button></div>
         </div>
@@ -351,9 +359,10 @@ function PageHeader({ kicker, title, description }: { kicker: string; title: str
 function PrivacyModal({ close, subjectId, reload, setNotice }: { close: () => void; subjectId: string; reload: () => Promise<void>; setNotice: SetNotice }) {
   const setPermission = async (status: string) => {
     try {
-      await request({ action: "set_consent", subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status });
+      if (status === "granted" && !window.confirm(AI_CONVERSATION_NOTICE)) return;
+      await request({ action: "set_consent", subjectId, scope: AI_CONVERSATION_SCOPE, status });
       await reload();
-      setNotice(status === "granted" ? "第三方 AI 处理授权已记录" : "授权已撤回，新的内容不会发送给第三方 AI");
+      setNotice(status === "granted" ? "DeepSeek 连续对话授权已记录" : "授权已撤回，后续消息不会发送给 DeepSeek；已发出的请求不受影响");
     } catch { setNotice("授权状态暂时无法保存"); }
   };
   const deleteAccount = async () => {
@@ -365,8 +374,8 @@ function PrivacyModal({ close, subjectId, reload, setNotice }: { close: () => vo
   return <div className="overlay"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
     <button className="close-button" onClick={close} aria-label="关闭"><Icon name="close" /></button>
     <span className="modal-kicker">数据与隐私</span><h2 id="privacy-title">你的内容由你控制</h2>
-    <p>只有在你授权后，生活场景和你主动保存的生活偏好才会发送给 DeepSeek API，用于从已审核行动中选择优先项；问题原文和对话历史不会发送。生活偏好和建议记录保存在你的账号下。</p>
-    <div className="permission"><span><b>DeepSeek 内容处理</b><small>用于生成生活方式建议</small></span><div><button onClick={() => setPermission("granted")}>授权</button><button onClick={() => setPermission("revoked")}>撤回</button></div></div>
+    <p>授权后，本次输入原文、当前对话最近最多 12 条可用消息和你主动保存的生活偏好会发送给 DeepSeek API，用于理解需求和连续交流。不会附带账号身份、旧医疗档案或其他对话。请勿在输入中填写敏感个人信息。旧版排序授权不会自动启用此功能。生活偏好和对话记录保存在你的账号下。</p>
+    <div className="permission"><span><b>DeepSeek 连续对话</b><small>撤回后不再发送新消息，已经发出的请求不受影响</small></span><div><button onClick={() => setPermission("granted")}>授权</button><button onClick={() => setPermission("revoked")}>撤回</button></div></div>
     <div className="modal-actions"><button className="danger-button" onClick={deleteAccount}>删除账号及全部数据</button><button className="primary-button" onClick={close}>完成</button></div>
   </section></div>;
 }

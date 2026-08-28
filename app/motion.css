@@ -70,6 +70,7 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
 .goal-card button.is-complete .icon { animation: check-pop 420ms cubic-bezier(.22, 1, .36, 1); }
 
 @keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.reply-source { display: inline-block; margin: 8px 0 8px 12px; color: var(--muted, #6b6255); font-size: 12px; }
 @keyframes welcome-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes card-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes user-message-enter { from { opacity: 0; transform: translate(8px, 6px); } to { opacity: 1; transform: none; } }

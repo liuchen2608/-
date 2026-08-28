@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     await audit(identity.userId, "subject_created", "lifestyle_profile", subjectId, subjectId, { relation: "self" });
   }
   const [permissionRows, conversationRows, goalRows] = await Promise.all([
-    database.select().from(consents).where(eq(consents.ownerUserId, identity.userId)).orderBy(asc(consents.createdAt)),
+    database.select().from(consents).where(eq(consents.ownerUserId, identity.userId)).orderBy(asc(consents.createdAt), asc(consents.status)),
     database.select().from(conversations).where(and(eq(conversations.ownerUserId, identity.userId), eq(conversations.productScope, "lifestyle"))).orderBy(desc(conversations.updatedAt)).limit(30),
     database.select().from(goals).where(eq(goals.ownerUserId, identity.userId)).orderBy(desc(goals.updatedAt)).limit(30),
   ]);

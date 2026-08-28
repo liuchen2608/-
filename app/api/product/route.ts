@@ -1,19 +1,12 @@
 import { and, desc, eq, like, or } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { consents, conversations, feedback, goalCheckins, goals, healthSubjects, messages, users } from "../../../db/schema";
+import { auditEvents, consents, conversations, feedback, goalCheckins, goals, healthSubjects, messages, users } from "../../../db/schema";
 import { apiIdentity, audit, db, files, id, json, now, unauthorized } from "../_lib";
 import { deleteAccountData, listOwnedObjectKeys } from "../account-deletion";
 import { mergeLifestylePreferences } from "../lifestyle-profile";
 import { parseGoalInput, parseMessageInput, readJsonObject } from "../product-input";
-import { classifyLifestyleRequest, finalizeLifestyleReply, prioritizeFallbackReply, type LifestyleCategory } from "../lifestyle-rules";
-
-type ModelAnswer = { reply: string; modelVersion: string; provider: "deepseek" | "rules_fallback"; error?: string };
-
-const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
-const LIFESTYLE_SYSTEM_PROMPT = `你是“大象阿宝”的行动排序器。服务端已经准备了 3 至 5 条经过审核的生活方式行动。
-你只能结合用户的饮食、作息、运动、习惯偏好，从这些行动中选择今天最适合优先开始的一项。
-只输出一个 JSON 对象，格式必须是 {"priority":1}，priority 必须是 1 至 5 的整数。
-不得输出解释、建议正文、诊断、治疗、药品、剂量、检查资料、机构或科室相关内容。`;
+import { answerDialogue } from "../deepseek-dialogue";
+import { AI_CONVERSATION_SCOPE } from "../../lib/ai-consent";
 
 function deepseekConfig() {
   const runtime = env as unknown as Record<string, unknown>;
@@ -32,52 +25,14 @@ async function ownedConversation(ownerUserId: string, conversationId: string) {
 }
 
 async function hasAiProcessingConsent(ownerUserId: string, subjectId: string) {
-  const latest = (await db().select({ status: consents.status }).from(consents).where(and(eq(consents.ownerUserId, ownerUserId), eq(consents.subjectId, subjectId), eq(consents.scope, "external_ai_processing"))).orderBy(desc(consents.createdAt)).limit(1))[0];
+  const latest = (await db().select({ status: consents.status }).from(consents).where(and(eq(consents.ownerUserId, ownerUserId), eq(consents.subjectId, subjectId), eq(consents.scope, AI_CONVERSATION_SCOPE))).orderBy(desc(consents.createdAt), desc(consents.status)).limit(1))[0];
   return latest?.status === "granted";
-}
-
-function lifestylePreferences(subject: typeof healthSubjects.$inferSelect) {
-  try { return JSON.parse(subject.profileJson || "{}").lifestylePreferences ?? {}; } catch { return {}; }
-}
-
-async function answerWithDeepSeek(fallback: string, category: LifestyleCategory, preferences: unknown): Promise<ModelAnswer> {
-  const { apiKey, model } = deepseekConfig();
-  if (!apiKey) return { reply: fallback, modelVersion: "lifestyle-rules-v1", provider: "rules_fallback", error: "missing_api_key" };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 18000);
-  try {
-    const response = await fetch(DEEPSEEK_ENDPOINT, {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: `${LIFESTYLE_SYSTEM_PROMPT}\n当前生活场景：${category}。\n用户主动保存的生活偏好：${JSON.stringify(preferences)}` },
-        ],
-        temperature: 0,
-        max_tokens: 30,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`deepseek_http_${response.status}`);
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const raw = payload.choices?.[0]?.message?.content ?? "";
-    const jsonObject = raw.match(/\{[\s\S]*\}/)?.[0];
-    const priority = jsonObject ? Number((JSON.parse(jsonObject) as { priority?: unknown }).priority) : Number.NaN;
-    const reply = prioritizeFallbackReply(fallback, priority);
-    if (reply === fallback) throw new Error("deepseek_invalid_priority");
-    return { reply, modelVersion: model, provider: "deepseek" };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : "deepseek_unknown_error";
-    return { reply: fallback, modelVersion: "lifestyle-rules-v1", provider: "rules_fallback", error: reason.slice(0, 80) };
-  } finally { clearTimeout(timeout); }
 }
 
 function mappedMessage(row: typeof messages.$inferSelect) {
   let context: Record<string, unknown> = {};
   try { context = JSON.parse(row.contextJson || "{}"); } catch { context = {}; }
-  return { ...row, category: context.category ?? "生活建议", responseType: context.responseType ?? "recommendation", provider: context.provider ?? null };
+  return { ...row, category: context.category ?? "生活建议", responseType: context.responseType ?? "recommendation", provider: context.provider ?? null, status: context.status ?? null };
 }
 
 export async function GET(request: Request) {
@@ -111,14 +66,15 @@ export async function POST(request: Request) {
   const action = String(body.action ?? "");
 
   if (action === "set_consent") {
-    if (body.scope !== "external_ai_processing") return Response.json({ error: "unsupported_scope" }, { status: 400 });
+    if (body.scope !== AI_CONVERSATION_SCOPE) return Response.json({ error: "unsupported_scope" }, { status: 400 });
     const subjectId = String(body.subjectId ?? "");
     if (!await ownedSubject(identity.userId, subjectId)) return Response.json({ error: "invalid_subject" }, { status: 403 });
     const consentId = id("consent");
-    const status = body.status === "granted" ? "granted" : "revoked";
+    if (body.status !== "granted" && body.status !== "revoked") return Response.json({ error: "invalid_consent_status" }, { status: 400 });
+    const status = body.status;
     const consentTimestamp = now();
-    await database.insert(consents).values({ id: consentId, ownerUserId: identity.userId, subjectId, scope: "external_ai_processing", purpose: "生成饮食、作息、运动和习惯建议", status, grantedAt: status === "granted" ? consentTimestamp : null, revokedAt: status === "revoked" ? consentTimestamp : null, createdAt: consentTimestamp, updatedAt: consentTimestamp });
-    await audit(identity.userId, status === "granted" ? "consent_granted" : "consent_revoked", "consent", consentId, subjectId, { scope: "external_ai_processing" });
+    await database.insert(consents).values({ id: consentId, ownerUserId: identity.userId, subjectId, scope: AI_CONVERSATION_SCOPE, purpose: "向 DeepSeek 发送本次输入、当前对话最近最多12条可用消息和主动保存的生活偏好，用于多轮生活需求对话", status, grantedAt: status === "granted" ? consentTimestamp : null, revokedAt: status === "revoked" ? consentTimestamp : null, createdAt: consentTimestamp, updatedAt: consentTimestamp });
+    await audit(identity.userId, status === "granted" ? "consent_granted" : "consent_revoked", "consent", consentId, subjectId, { scope: AI_CONVERSATION_SCOPE });
     return Response.json({ id: consentId, status }, { status: 201 });
   }
 
@@ -159,25 +115,26 @@ export async function POST(request: Request) {
     const conversation = await ownedConversation(identity.userId, conversationId);
     if (!conversation) return Response.json({ error: "not_found" }, { status: 404 });
 
-    const guard = classifyLifestyleRequest(content);
-    const userMessageId = id("message");
-    await database.insert(messages).values({ id: userMessageId, conversationId: conversation.id, role: "user", content, inputType: "text", riskLevel: "lifestyle", contextJson: json({ productScope: "lifestyle" }) });
-
     const subject = await ownedSubject(identity.userId, conversation.subjectId);
+    if (!subject) return Response.json({ error: "invalid_subject" }, { status: 403 });
+    // Context comes only from this owned lifestyle conversation, never from the client.
+    const recent = await database.select({ role: messages.role, content: messages.content, contextJson: messages.contextJson }).from(messages).where(eq(messages.conversationId, conversation.id)).orderBy(desc(messages.createdAt), desc(messages.id)).limit(12);
     const aiConsent = await hasAiProcessingConsent(identity.userId, conversation.subjectId);
-    const modelAnswer: { reply: string; modelVersion: string; provider: "rules_fallback" | "deepseek"; error?: string } = guard.responseType !== "recommendation"
-      ? { reply: guard.reply, modelVersion: "lifestyle-guard-v2", provider: "rules_fallback" as const }
-      : aiConsent && subject
-        ? await answerWithDeepSeek(guard.reply, guard.category, lifestylePreferences(subject))
-        : { reply: guard.reply, modelVersion: "lifestyle-rules-v1", provider: "rules_fallback" as const, error: "ai_processing_consent_required" };
-    const finalReply = finalizeLifestyleReply(guard, modelAnswer.reply);
+    const answer = await answerDialogue({ content, history: recent.reverse(), profileJson: subject.profileJson, consent: aiConsent, ...deepseekConfig() });
+    const userMessageId = id("message");
     const assistantMessageId = id("message");
-    await database.insert(messages).values({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: finalReply, inputType: "text", riskLevel: guard.responseType, modelVersion: modelAnswer.modelVersion, sourcesJson: "[]", contextJson: json({ category: guard.category, responseType: guard.responseType, provider: modelAnswer.provider, productScope: "lifestyle" }) });
-    await database.update(conversations).set({ title: content.slice(0, 30), summary: content.slice(0, 120), riskLevel: guard.responseType, updatedAt: now() }).where(eq(conversations.id, conversation.id));
-    await audit(identity.userId, "lifestyle_message_processed", "conversation", conversation.id, conversation.subjectId, { category: guard.category, responseType: guard.responseType, provider: modelAnswer.provider, providerError: modelAnswer.error ?? null }, modelAnswer.modelVersion);
+    const timestamp = Date.now();
+    const context = { category: answer.category, responseType: answer.responseType, provider: answer.provider, status: answer.status, productScope: "lifestyle", dialogueVersion: 1 };
+    // Persist the complete turn and audit atomically, without orphan user messages.
+    await database.batch([
+      database.insert(messages).values({ id: userMessageId, conversationId: conversation.id, role: "user", content, inputType: "text", riskLevel: "lifestyle", contextJson: json({ productScope: "lifestyle", dialogueVersion: 1 }), createdAt: new Date(timestamp).toISOString() }),
+      database.insert(messages).values({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: answer.reply, inputType: "text", riskLevel: answer.responseType, modelVersion: answer.modelVersion, sourcesJson: "[]", contextJson: json(context), createdAt: new Date(timestamp + 1).toISOString() }),
+      database.update(conversations).set({ summary: content.slice(0, 120), riskLevel: answer.responseType, updatedAt: new Date(timestamp + 1).toISOString() }).where(eq(conversations.id, conversation.id)),
+      database.insert(auditEvents).values({ id: id("audit"), ownerUserId: identity.userId, subjectId: conversation.subjectId, action: "lifestyle_message_processed", resourceType: "conversation", resourceId: conversation.id, metadataJson: json({ ...context, providerError: answer.error ?? null }), modelVersion: answer.modelVersion }),
+    ]);
     return Response.json({
       userMessage: { id: userMessageId, role: "user", content },
-      assistantMessage: { id: assistantMessageId, role: "assistant", content: finalReply, category: guard.category, responseType: guard.responseType, modelVersion: modelAnswer.modelVersion, provider: modelAnswer.provider },
+      assistantMessage: { id: assistantMessageId, role: "assistant", content: answer.reply, category: answer.category, responseType: answer.responseType, modelVersion: answer.modelVersion, provider: answer.provider, status: answer.status },
     });
   }
 

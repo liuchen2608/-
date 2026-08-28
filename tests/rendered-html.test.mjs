@@ -32,19 +32,18 @@ test("asks anonymous visitors to sign in before loading personal features",async
   assert.doesNotMatch(html,/你好，我是阿宝/);
 });
 
-test("uses deterministic lifestyle boundaries before and after generation",async()=>{
+test("routes lifestyle messages through the consent-gated dialogue adapter",async()=>{
   const rules=await readFile(new URL("../app/api/lifestyle-rules.ts",import.meta.url),"utf8");
   const api=await readFile(new URL("../app/api/product/route.ts",import.meta.url),"utf8");
   assert.match(rules,/prohibitedRequestPattern/);
   assert.match(rules,/prohibitedOutputPattern/);
   assert.match(rules,/BOUNDARY_REPLY/);
   assert.match(rules,/SAFETY_STOP_REPLY/);
-  assert.match(api,/classifyLifestyleRequest/);
-  assert.match(api,/prioritizeFallbackReply/);
-  assert.match(api,/deepseek_invalid_priority/);
-  assert.doesNotMatch(api,/answerWithDeepSeek\(history/);
-  assert.doesNotMatch(api,/\.\.\.history/);
-  assert.match(api,/guard\.responseType !== "recommendation"/);
+  assert.match(api,/answerDialogue/);
+  assert.match(api,/eq\(consents.scope, AI_CONVERSATION_SCOPE\)/);
+  assert.match(api,/where\(eq\(messages.conversationId, conversation.id\)\)/);
+  assert.match(api,/database.batch/);
+  assert.doesNotMatch(api,/body.history|body.profileJson|body.apiKey/);
   assert.doesNotMatch(api,/service_intent|device_status|create_record|media_processing/);
 });
 
@@ -74,7 +73,7 @@ test("orders consent history and timestamps new decisions explicitly",async()=>{
   const bootstrap=await readFile(new URL("../app/api/bootstrap/route.ts",import.meta.url),"utf8");
   assert.match(api,/createdAt:\s*consentTimestamp/);
   assert.match(api,/updatedAt:\s*consentTimestamp/);
-  assert.match(bootstrap,/orderBy\(asc\(consents\.createdAt\)\)/);
+  assert.match(bootstrap,/orderBy\(asc\(consents\.createdAt\), asc\(consents\.status\)\)/);
 });
 
 test("keeps only lifestyle-facing product language",async()=>{

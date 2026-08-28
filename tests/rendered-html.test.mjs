@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { classifyLifestyleRequest } from "../app/api/lifestyle-rules.ts";
 
 async function render(headers={}){
   const workerUrl=new URL("../dist/server/index.js",import.meta.url);workerUrl.searchParams.set("test",`${process.pid}-${Date.now()}`);
@@ -17,6 +18,11 @@ test("renders the lifestyle recommendation homepage",async()=>{
   assert.match(html,/帮我安排健康的一天/);
   assert.match(html,/给我一份新手运动计划/);
   assert.doesNotMatch(html,/医疗服务|设备数据|体检报告|预约挂号|健康档案/);
+  const promptGrid=html.match(/class="prompt-grid">([\s\S]*?)class="scope-note"/);
+  assert.ok(promptGrid,"homepage suggestion buttons must be rendered");
+  const suggestedInputs=[...promptGrid[1].matchAll(/<b>([^<]+)<\/b>/g)].map((match)=>match[1]);
+  assert.equal(suggestedInputs.length,4);
+  for(const input of suggestedInputs)assert.equal(classifyLifestyleRequest(input).responseType,"recommendation",`homepage suggestion: ${input}`);
 });
 
 test("asks anonymous visitors to sign in before loading personal features",async()=>{

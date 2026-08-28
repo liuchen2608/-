@@ -20,7 +20,7 @@ const nav: Array<{ label: PageName; icon: IconName }> = [
 
 const prompts = [
   ["帮我安排健康的一天", "早、中、晚的饮食、活动与休息建议"],
-  ["最近总是睡不好", "从今晚能做到的小调整开始"],
+  ["我想调整作息", "从今晚能做到的小调整开始"],
   ["给我一份新手运动计划", "按时间和经验安排低门槛活动"],
   ["帮我改善晚餐习惯", "减少太晚、太撑和随意进食"],
 ];
@@ -31,7 +31,7 @@ const request = async <T,>(payload: Record<string, unknown>): Promise<T> => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await response.json();
+  const data = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(data.error || "request_failed");
   return data as T;
 };
@@ -84,7 +84,7 @@ export default function Home() {
   const openConversation = async (id: string) => {
     try {
       const response = await fetch(`/api/product?resource=messages&conversationId=${encodeURIComponent(id)}`);
-      const data = await response.json();
+      const data = await response.json() as { messages?: Message[] };
       if (!response.ok) throw new Error("history_unavailable");
       setConversationId(id);
       setConversation({ items: data.messages });
@@ -198,9 +198,10 @@ function AdvicePage({ conversation, conversationId, onStart, setNotice }: { conv
       setSending(false);
     }
   };
-  const rate = async (messageId: string, type: string) => {
+  const rate = async (messageId: string | undefined, type: string) => {
+    if (!messageId) return;
     try {
-      if (messageId) await request({ action: "feedback", messageId, type });
+      await request({ action: "feedback", messageId, type });
       setNotice("感谢反馈，我们会继续优化建议的可执行性");
     } catch {
       setNotice("反馈暂时无法保存");
@@ -377,7 +378,7 @@ function HistoryModal({ close, openConversation }: { close: () => void; openConv
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const search = async (value = query) => {
     const response = await fetch(`/api/product?resource=history&q=${encodeURIComponent(value)}`);
-    if (response.ok) setRows((await response.json()).conversations ?? []);
+    if (response.ok) setRows(((await response.json()) as { conversations?: HistoryRow[] }).conversations ?? []);
   };
   useEffect(() => {
     void fetch("/api/product?resource=history&q=").then(async (response) => {

@@ -166,7 +166,7 @@ export async function POST(request: Request) {
     const subject = await ownedSubject(identity.userId, conversation.subjectId);
     const aiConsent = await hasAiProcessingConsent(identity.userId, conversation.subjectId);
     const modelAnswer: { reply: string; modelVersion: string; provider: "rules_fallback" | "deepseek"; error?: string } = guard.responseType !== "recommendation"
-      ? { reply: guard.reply, modelVersion: "lifestyle-guard-v1", provider: "rules_fallback" as const }
+      ? { reply: guard.reply, modelVersion: "lifestyle-guard-v2", provider: "rules_fallback" as const }
       : aiConsent && subject
         ? await answerWithDeepSeek(guard.reply, guard.category, lifestylePreferences(subject))
         : { reply: guard.reply, modelVersion: "lifestyle-rules-v1", provider: "rules_fallback" as const, error: "ai_processing_consent_required" };

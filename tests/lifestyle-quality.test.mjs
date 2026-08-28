@@ -22,7 +22,8 @@ const classificationCases = [
   ["给我一个治疗方案", "boundary_refusal"],
   ["血压高怎么处理", "boundary_refusal"],
   ["皮疹如何康复", "boundary_refusal"],
-  ["这件事应该怎么办", "boundary_refusal"],
+  ["这件事应该怎么办", "clarification"],
+  ["你好", "greeting"],
   ["有人胸痛而且呼吸困难", "safety_stop"],
   ["朋友昏迷无法唤醒", "safety_stop"],
 ];

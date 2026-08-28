@@ -4,10 +4,12 @@ export type LifestyleCategory =
   | "运动"
   | "习惯"
   | "一天计划"
+  | "打个招呼"
+  | "补充说明"
   | "边界说明"
   | "安全中止";
 
-export type ResponseType = "recommendation" | "boundary_refusal" | "safety_stop";
+export type ResponseType = "recommendation" | "greeting" | "clarification" | "boundary_refusal" | "safety_stop";
 
 export type GuardResult = {
   category: LifestyleCategory;
@@ -21,16 +23,26 @@ export const BOUNDARY_REPLY =
 export const SAFETY_STOP_REPLY =
   "你描述的情况不适合由生活建议助手继续回答。请立即向身边可信赖的人求助，并联系当地紧急求助服务。";
 
+export const GREETING_REPLY =
+  "你好，我是阿宝。可以帮你整理饮食、作息、运动和日常习惯的小计划。你今天想先聊哪一方面？";
+
+export const CLARIFICATION_REPLY =
+  "我还不太确定你想改善哪件事，可以说得具体一点吗？我目前只提供饮食、作息、运动和日常习惯方面的建议，例如“帮我安排健康的一天”或“我想调整作息”。";
+
+const greetingPattern = /^(?:阿宝)?(?:你好|您好|嗨|哈喽|早上好|下午好|晚上好|早安|晚安|在吗|hello|hi)(?:呀|啊)?(?:阿宝)?$/i;
+const introductionPattern = /^(?:你是谁|你能做什么|你可以做什么|你会做什么)$/;
+
 const urgentPattern = /胸痛|心梗|心肌梗死|脑卒中|中风|偏瘫|瘫痪|口角歪斜|说话不清|呼吸困难|无法呼吸|喘不过气|窒息|噎住|喉咙肿|昏迷|意识不清|出血|休克|抽搐|癫痫发作|无法唤醒|溺水|中毒|误食|吞了很多|服药过量|药物过量|安眠药|触电|坠落|车祸|严重烧伤|严重烫伤|自杀|轻生|跳楼|割腕/;
 const prohibitedRequestPattern =
   /诊断|确诊|什么病|病因|治疗|治好|药|口服|服用|胶囊|注射|打针|针剂|疫苗|抗生素|止痛|消炎|剂量|处方|疗程|头孢|胰岛素|布洛芬|阿司匹林|对乙酰氨基酚|中医|西医|检查报告|化验|影像|体检报告|挂号|科室|问诊|医生|医院/;
 const symptomPattern =
   /头疼|头痛|腹痛|肚子疼|恶心|呕吐|发烧|发热|咳嗽|头晕|眩晕|心悸|胸闷|皮疹|疼痛|不舒服|症状|血压|血糖|过敏|受伤|骨折|感染|炎症/;
 const medicalEntityPattern =
-  /糖尿病|高血压|冠心病|心脏病|肾病|肝病|癌症|肿瘤|哮喘|抑郁症|焦虑症|患者|病人|孕妇|孕期|备孕|哺乳期|婴儿|儿童|未成年人|老年人|术后|康复期/;
+  /糖尿病|高血压|冠心病|心脏病|肾病|肝病|癌症|肿瘤|哮喘|甲亢|痛风|癫痫|抑郁症|焦虑症|患者|病人|孕妇|孕期|备孕|哺乳期|婴儿|儿童|未成年人|老年人|术后|康复期/;
 const medicationNamePattern =
   /[\u4e00-\u9fff]{2,10}(?:林|唑|沙坦|普利|地平|洛尔|汀|霉素|西林)(?=怎么|如何|搭配|早餐|午餐|晚餐|吃|服|用|$)/;
 const approvedLifestyleTerms = [
+  "你好", "您好", "阿宝", "hello", "hi",
   "健康的一天", "日常生活", "时间管理", "早中晚", "晚饭后", "睡觉前", "睡前", "起床后", "饭后", "工作日",
   "生活", "健康", "安排", "计划", "目标", "习惯", "坚持", "建立", "养成", "改善", "调整", "固定", "开始", "完成", "记录", "打卡", "减少", "增加", "准备", "选择", "专注", "拖延", "忘记",
   "作息", "休息", "睡觉", "睡眠", "入睡", "早起", "起床", "晚起", "熬夜", "午睡", "晚上", "早上", "中午", "下午", "周末", "平时",
@@ -50,8 +62,13 @@ export function classifyLifestyleRequest(input: string): GuardResult {
   if (prohibitedRequestPattern.test(text) || symptomPattern.test(text) || medicalEntityPattern.test(text) || medicationNamePattern.test(text)) {
     return { category: "边界说明", responseType: "boundary_refusal", reply: BOUNDARY_REPLY };
   }
+  // Match the entire greeting; never discard a second clause that may need a safety check.
+  const conversationalText = text.normalize("NFKC").replace(/[\s，,。.!！?？、：:；;]/g, "");
+  if (greetingPattern.test(conversationalText) || introductionPattern.test(conversationalText)) {
+    return { category: "打个招呼", responseType: "greeting", reply: GREETING_REPLY };
+  }
   if (!containsOnlyApprovedLifestyleTerms(text)) {
-    return { category: "边界说明", responseType: "boundary_refusal", reply: BOUNDARY_REPLY };
+    return { category: "补充说明", responseType: "clarification", reply: CLARIFICATION_REPLY };
   }
   if (/早中晚|一天计划|健康的一天|每日计划|一日安排/.test(text)) {
     return { category: "一天计划", responseType: "recommendation", reply: fallbackFor("一天计划") };
@@ -62,13 +79,13 @@ export function classifyLifestyleRequest(input: string): GuardResult {
   if (/早餐|午餐|晚餐|三餐|饮食|用餐|进食|食物|主食|蔬菜|水果|喝水|咖啡|茶|零食|外卖/.test(text)) {
     return { category: "饮食", responseType: "recommendation", reply: fallbackFor("饮食") };
   }
-  if (/运动|健身|久坐|锻炼|走路|训练|拉伸/.test(text)) {
+  if (/运动|健身|久坐|锻炼|走路|散步|跑步|骑车|瑜伽|训练|拉伸/.test(text)) {
     return { category: "运动", responseType: "recommendation", reply: fallbackFor("运动") };
   }
-  if (/习惯|坚持|拖延|计划|目标|打卡|时间管理|专注|手机|久坐/.test(text)) {
+  if (/习惯|坚持|拖延|计划|目标|打卡|时间管理|专注|手机|久坐|阅读|读书/.test(text)) {
     return { category: "习惯", responseType: "recommendation", reply: fallbackFor("习惯") };
   }
-  return { category: "边界说明", responseType: "boundary_refusal", reply: BOUNDARY_REPLY };
+  return { category: "补充说明", responseType: "clarification", reply: CLARIFICATION_REPLY };
 }
 
 export function containsProhibitedOutput(text: string) {
@@ -76,7 +93,7 @@ export function containsProhibitedOutput(text: string) {
 }
 
 function containsOnlyApprovedLifestyleTerms(text: string) {
-  let remaining = text;
+  let remaining = text.toLowerCase();
   for (const term of approvedLifestyleTerms) remaining = remaining.replaceAll(term, "");
   remaining = remaining.replace(/[\s0-9０-９一二三四五六七八九十百千万半个份次周天日月年点分秒小时分钟、，。！？?!：:；;（）()【】《》“”‘’"'—…·+\-/]/g, "");
   return remaining.length === 0;

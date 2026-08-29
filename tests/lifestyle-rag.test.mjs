@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildRagContext, resolveCitedSources, restoreStoredSources, retrieveLifestyleKnowledge, RAG_SOURCE_COUNT } from "../app/api/lifestyle-rag.ts";
 
@@ -33,4 +34,21 @@ test("only resolves server-allowlisted source ids and removes duplicates", () =>
   assert.match(sources[0].url, /^https:\/\/(?:www\.)?cdc\.gov\//);
   assert.deepEqual(restoreStoredSources(JSON.stringify(["cdc-sleep-2024", "javascript:alert(1)"])).map((source) => source.id), ["cdc-sleep-2024"]);
   assert.deepEqual(restoreStoredSources("not json"), []);
+});
+
+test("the Markdown export mirrors every active knowledge source", async () => {
+  const markdown = await readFile(new URL("../docs/lifestyle-rag.md", import.meta.url), "utf8");
+  const ids = [
+    "who-healthy-diet-2026",
+    "china-cdc-dietary-guidelines-2022",
+    "nhc-health-literacy-2024",
+    "cdc-sleep-2024",
+    "who-physical-activity-2024",
+    "hhs-move-your-way",
+    "niddk-changing-habits",
+  ];
+  assert.equal(ids.length, RAG_SOURCE_COUNT);
+  for (const id of ids) assert.ok(markdown.includes("**source_id:** `" + id + "`"));
+  assert.match(markdown, /统一安全边界/);
+  assert.match(markdown, /DeepSeek 上下文格式/);
 });

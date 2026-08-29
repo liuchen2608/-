@@ -20,6 +20,7 @@ test("ordinary greetings reach DeepSeek with the actual user message", async () 
     assert.equal(options.headers.authorization, "Bearer synthetic-test-key");
     const body = JSON.parse(options.body);
     assert.deepEqual(body.messages.at(-1), { role: "user", content: "你好" });
+    assert.match(body.messages[1].content, /没有检索到直接相关/);
     assert.equal(body.model, base.model);
     assert.deepEqual(body.thinking, { type: "disabled" });
     assert.deepEqual(body.response_format, { type: "json_object" });
@@ -39,14 +40,32 @@ test("three turns carry earlier questions and short answers without repeating cu
     const reply = index === 0 ? "你通常几点睡、几点起床？" : index === 1 ? "你晚上主要在做什么？" : "可以先从今晚提前十分钟放下手机开始。";
     const answer = await answerDialogue({ ...base, content, history }, { fetch: async (_url, options) => {
       const sent = JSON.parse(options.body).messages;
-      assert.deepEqual(sent.slice(2, -1), history.map(({ role, content }) => ({ role, content })));
+      assert.deepEqual(sent.slice(3, -1), history.map(({ role, content }) => ({ role, content })));
       assert.deepEqual(sent.at(-1), { role: "user", content });
-      return result({ reply, responseType: index === 2 ? "recommendation" : "clarification", category: index === 2 ? "作息" : "补充说明" });
+      return result({ reply, responseType: index === 2 ? "recommendation" : "clarification", category: index === 2 ? "作息" : "补充说明", ...(index === 2 ? { sourceIds: ["cdc-sleep-2024"] } : {}) });
     } });
     assert.equal(answer.provider, "deepseek");
     assert.match(answer.reply, new RegExp(reply));
     history.push(...turn(content, answer.reply));
   }
+});
+
+test("recommendations are grounded in retrieved sources and invented ids are discarded", async () => {
+  const answer = await answerDialogue({ ...base, content: "帮我改善晚餐习惯" }, { fetch: async (_url, options) => {
+    const body = JSON.parse(options.body);
+    assert.match(body.messages[1].content, /来源ID: who-healthy-diet-2026/);
+    return result({ reply: "今晚先给晚餐安排一份蔬菜和一种常见蛋白质食物。", responseType: "recommendation", category: "饮食", sourceIds: ["who-healthy-diet-2026", "invented-source"] });
+  } });
+  assert.equal(answer.provider, "deepseek");
+  assert.deepEqual(answer.sources.map((source) => source.id), ["who-healthy-diet-2026"]);
+  assert.match(answer.reply, /以上仅为日常生活方式参考/);
+});
+
+test("a grounded recommendation without a valid citation falls back safely", async () => {
+  const answer = await answerDialogue({ ...base, content: "我想调整作息" }, { fetch: async () => result({ reply: "今晚提前十分钟放下手机。", responseType: "recommendation", category: "作息", sourceIds: ["invented-source"] }) });
+  assert.equal(answer.provider, "rules_fallback");
+  assert.equal(answer.error, "deepseek_invalid_response");
+  assert.deepEqual(answer.sources, []);
 });
 
 test("legacy consent, another subject and withdrawn consent never authorize conversation", async () => {

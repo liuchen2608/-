@@ -6,6 +6,7 @@ import { deleteAccountData, listOwnedObjectKeys } from "../account-deletion";
 import { mergeLifestylePreferences } from "../lifestyle-profile";
 import { parseGoalInput, parseMessageInput, readJsonObject } from "../product-input";
 import { answerDialogue } from "../deepseek-dialogue";
+import { restoreStoredSources } from "../lifestyle-rag";
 import { AI_CONVERSATION_SCOPE } from "../../lib/ai-consent";
 
 function deepseekConfig() {
@@ -32,7 +33,7 @@ async function hasAiProcessingConsent(ownerUserId: string, subjectId: string) {
 function mappedMessage(row: typeof messages.$inferSelect) {
   let context: Record<string, unknown> = {};
   try { context = JSON.parse(row.contextJson || "{}"); } catch { context = {}; }
-  return { ...row, category: context.category ?? "生活建议", responseType: context.responseType ?? "recommendation", provider: context.provider ?? null, status: context.status ?? null };
+  return { ...row, sources: restoreStoredSources(row.sourcesJson), category: context.category ?? "生活建议", responseType: context.responseType ?? "recommendation", provider: context.provider ?? null, status: context.status ?? null };
 }
 
 export async function GET(request: Request) {
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     if (body.status !== "granted" && body.status !== "revoked") return Response.json({ error: "invalid_consent_status" }, { status: 400 });
     const status = body.status;
     const consentTimestamp = now();
-    await database.insert(consents).values({ id: consentId, ownerUserId: identity.userId, subjectId, scope: AI_CONVERSATION_SCOPE, purpose: "向 DeepSeek 发送本次输入、当前对话最近最多12条可用消息和主动保存的生活偏好，用于多轮生活需求对话", status, grantedAt: status === "granted" ? consentTimestamp : null, revokedAt: status === "revoked" ? consentTimestamp : null, createdAt: consentTimestamp, updatedAt: consentTimestamp });
+    await database.insert(consents).values({ id: consentId, ownerUserId: identity.userId, subjectId, scope: AI_CONVERSATION_SCOPE, purpose: "向 DeepSeek 发送本次输入、当前对话最近最多12条可用消息、主动保存的生活偏好和检索到的公开健康生活资料片段，用于有出处的多轮生活需求对话", status, grantedAt: status === "granted" ? consentTimestamp : null, revokedAt: status === "revoked" ? consentTimestamp : null, createdAt: consentTimestamp, updatedAt: consentTimestamp });
     await audit(identity.userId, status === "granted" ? "consent_granted" : "consent_revoked", "consent", consentId, subjectId, { scope: AI_CONVERSATION_SCOPE });
     return Response.json({ id: consentId, status }, { status: 201 });
   }
@@ -128,13 +129,13 @@ export async function POST(request: Request) {
     // Persist the complete turn and audit atomically, without orphan user messages.
     await database.batch([
       database.insert(messages).values({ id: userMessageId, conversationId: conversation.id, role: "user", content, inputType: "text", riskLevel: "lifestyle", contextJson: json({ productScope: "lifestyle", dialogueVersion: 1 }), createdAt: new Date(timestamp).toISOString() }),
-      database.insert(messages).values({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: answer.reply, inputType: "text", riskLevel: answer.responseType, modelVersion: answer.modelVersion, sourcesJson: "[]", contextJson: json(context), createdAt: new Date(timestamp + 1).toISOString() }),
+      database.insert(messages).values({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: answer.reply, inputType: "text", riskLevel: answer.responseType, modelVersion: answer.modelVersion, sourcesJson: json(answer.sources.map((source) => source.id)), contextJson: json(context), createdAt: new Date(timestamp + 1).toISOString() }),
       database.update(conversations).set({ summary: content.slice(0, 120), riskLevel: answer.responseType, updatedAt: new Date(timestamp + 1).toISOString() }).where(eq(conversations.id, conversation.id)),
       database.insert(auditEvents).values({ id: id("audit"), ownerUserId: identity.userId, subjectId: conversation.subjectId, action: "lifestyle_message_processed", resourceType: "conversation", resourceId: conversation.id, metadataJson: json({ ...context, providerError: answer.error ?? null }), modelVersion: answer.modelVersion }),
     ]);
     return Response.json({
       userMessage: { id: userMessageId, role: "user", content },
-      assistantMessage: { id: assistantMessageId, role: "assistant", content: answer.reply, category: answer.category, responseType: answer.responseType, modelVersion: answer.modelVersion, provider: answer.provider, status: answer.status },
+      assistantMessage: { id: assistantMessageId, role: "assistant", content: answer.reply, category: answer.category, responseType: answer.responseType, modelVersion: answer.modelVersion, provider: answer.provider, status: answer.status, sources: answer.sources },
     });
   }
 

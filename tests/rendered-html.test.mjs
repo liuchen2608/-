@@ -34,7 +34,9 @@ test("asks anonymous visitors to sign in before loading personal features",async
 
 test("routes lifestyle messages through the consent-gated dialogue adapter",async()=>{
   const rules=await readFile(new URL("../app/api/lifestyle-rules.ts",import.meta.url),"utf8");
+  const rag=await readFile(new URL("../app/api/lifestyle-rag.ts",import.meta.url),"utf8");
   const api=await readFile(new URL("../app/api/product/route.ts",import.meta.url),"utf8");
+  const page=await readFile(new URL("../app/page.tsx",import.meta.url),"utf8");
   assert.match(rules,/prohibitedRequestPattern/);
   assert.match(rules,/prohibitedOutputPattern/);
   assert.match(rules,/BOUNDARY_REPLY/);
@@ -43,6 +45,10 @@ test("routes lifestyle messages through the consent-gated dialogue adapter",asyn
   assert.match(api,/eq\(consents.scope, AI_CONVERSATION_SCOPE\)/);
   assert.match(api,/where\(eq\(messages.conversationId, conversation.id\)\)/);
   assert.match(api,/database.batch/);
+  assert.match(api,/restoreStoredSources/);
+  assert.match(rag,/retrieveLifestyleKnowledge/);
+  assert.match(rag,/resolveCitedSources/);
+  assert.match(page,/className="rag-sources"/);
   assert.doesNotMatch(api,/body.history|body.profileJson|body.apiKey/);
   assert.doesNotMatch(api,/service_intent|device_status|create_record|media_processing/);
 });

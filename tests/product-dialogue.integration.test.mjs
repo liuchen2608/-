@@ -47,8 +47,13 @@ test("deployed route: ownership, consent, multi-turn persistence, withdrawal and
   const calls = [];
   t.mock.method(globalThis, "fetch", async (url, options) => {
     assert.equal(url, "https://api.deepseek.com/chat/completions");
-    calls.push(JSON.parse(options.body));
-    return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ reply: "你通常几点睡、几点起床？", responseType: "clarification", category: "补充说明" }) } }] });
+    const call = JSON.parse(options.body);
+    calls.push(call);
+    const isFollowup = call.messages.at(-1).content.includes("凌晨");
+    const answer = isFollowup
+      ? { reply: "今晚可以先提前十分钟放下手机。", responseType: "recommendation", category: "作息", sourceIds: ["cdc-sleep-2024"] }
+      : { reply: "你通常几点睡、几点起床？", responseType: "clarification", category: "补充说明" };
+    return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(answer) } }] });
   });
   const { default: worker } = await import("../dist/server/index.js");
   const request = async (payload, user = "user-a", path = "/api/product") => {
@@ -83,10 +88,12 @@ test("deployed route: ownership, consent, multi-turn persistence, withdrawal and
     assert.equal(calls[0].messages.at(-1).content, "我想调整作息");
     const second = await send("凌晨一点，七点半起床");
     assert.equal(second.body.assistantMessage.provider, "deepseek");
-    assert.deepEqual(calls[1].messages.slice(2).map(row => row.content), ["我想调整作息", "你通常几点睡、几点起床？", "凌晨一点，七点半起床"]);
+    assert.deepEqual(calls[1].messages.slice(3).map(row => row.content), ["我想调整作息", "你通常几点睡、几点起床？", "凌晨一点，七点半起床"]);
+    assert.deepEqual(second.body.assistantMessage.sources.map(source => source.id), ["cdc-sleep-2024"]);
     const history = await request(null, "user-a", `/api/product?resource=messages&conversationId=${conversationId}`);
     assert.equal(history.body.messages.length, 6);
     assert.equal(history.body.messages.at(-1).status, "connected");
+    assert.deepEqual(history.body.messages.at(-1).sources.map(source => source.id), ["cdc-sleep-2024"]);
     const callCount = calls.length;
     assert.equal((await request({ action: "send_message", conversationId, content: "你好" }, "user-b")).status, 404);
     assert.equal((await request(null, "user-b", `/api/product?resource=messages&conversationId=${conversationId}`)).status, 404);

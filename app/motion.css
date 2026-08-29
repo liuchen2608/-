@@ -37,6 +37,7 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
 .assistant-message > div > .category { animation: advice-line-enter 260ms 50ms ease both; }
 .assistant-message > div > p { animation: advice-line-enter 300ms 110ms ease both; }
 .assistant-message .feedback-row { animation: advice-line-enter 280ms 180ms ease both; }
+.assistant-message .rag-sources { animation: advice-line-enter 280ms 160ms ease both; }
 
 .thinking-card {
   width: min(760px, 100%);
@@ -92,6 +93,6 @@ button:active:not(:disabled) { transform: translateY(1px) scale(.99); }
   .thinking-dots > i { opacity: .65 !important; transform: none !important; }
   .content > .chat-page, .content > .page, .welcome-mark, .welcome > .eyebrow, .welcome > h1, .welcome > p,
   .prompt-grid button, .scope-note, .user-message, .assistant-message, .assistant-message > div > .category,
-  .assistant-message > div > p, .assistant-message .feedback-row, .thinking-card, .overlay, .modal, .toast,
+  .assistant-message > div > p, .assistant-message .rag-sources, .assistant-message .feedback-row, .thinking-card, .overlay, .modal, .toast,
   .goal-card button.is-complete .icon { animation: none !important; transform: none !important; }
 }

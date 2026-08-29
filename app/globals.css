@@ -195,3 +195,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .chat-page:has(.welcome) .welcome h1{font-size:clamp(50px,17vw,72px)}
   .chat-page:has(.welcome) .prompt-grid button{min-height:84px}
 }
+
+.rag-sources{margin-top:18px;padding:14px 16px;border-left:2px solid var(--editorial-brass);background:rgba(238,229,216,.58)}
+.rag-sources>b{display:block;margin-bottom:8px;color:var(--editorial-ink);font-size:12px;letter-spacing:.08em}
+.rag-sources ul{display:grid;gap:6px;margin:0;padding-left:18px}
+.rag-sources li{color:var(--muted);font-size:12px;line-height:1.5}
+.rag-sources a{color:inherit;text-underline-offset:3px}
+.rag-sources a:hover{color:var(--primary-strong)}
+.rag-sources a:focus-visible{outline:2px solid rgba(200,139,72,.58);outline-offset:3px}

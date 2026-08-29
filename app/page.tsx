@@ -8,7 +8,8 @@ type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" |
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
 type Goal = { id: string; type: string; title: string };
-type Message = { id?: string; role: "user" | "assistant"; content: string; category?: string; responseType?: string; provider?: string; status?: string };
+type RagSource = { id: string; title: string; organization: string; url: string };
+type Message = { id?: string; role: "user" | "assistant"; content: string; category?: string; responseType?: string; provider?: string; status?: string; sources?: RagSource[] };
 type Conversation = { userMessage?: Message; assistantMessage?: Message; items?: Message[] };
 type BootstrapData = { subject?: Subject; consents?: Consent[]; goals?: Goal[] };
 type SetNotice = (message: string) => void;
@@ -239,8 +240,12 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
                 <LogoMark />
                 <div>
                   <span className="category">{message.category ?? "生活建议"}</span>
-                  {message.provider && <small className="reply-source">{message.provider === "deepseek" ? "DeepSeek 回复" : message.status === "unavailable" ? "DeepSeek 暂未连接 · 本地回复" : message.status === "consent_required" ? "尚未授权 DeepSeek · 本地回复" : "本地安全提示"}</small>}
+                  {message.provider && <small className="reply-source">{message.provider === "deepseek" ? message.sources?.length ? "DeepSeek · 知识库回答" : "DeepSeek 回复" : message.status === "unavailable" ? "DeepSeek 暂未连接 · 本地回复" : message.status === "consent_required" ? "尚未授权 DeepSeek · 本地回复" : "本地安全提示"}</small>}
                   <p>{message.content}</p>
+                  {!!message.sources?.length && <aside className="rag-sources" aria-label="本条建议的参考来源">
+                    <b>参考来源</b>
+                    <ul>{message.sources.map((source) => <li key={source.id}><a href={source.url} target="_blank" rel="noreferrer">{source.organization} · {source.title}</a></li>)}</ul>
+                  </aside>}
                   {message.status === "consent_required" && <small>可在“数据与隐私”中授权，开启连续需求对话。</small>}
                   {message.status === "unavailable" && <small>本次未获得有效的 DeepSeek 回复，请稍后重试；持续失败时请联系管理员检查连接配置。</small>}
                   {message.id && <div className="feedback-row">
@@ -374,7 +379,7 @@ function PrivacyModal({ close, subjectId, reload, setNotice }: { close: () => vo
   return <div className="overlay"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
     <button className="close-button" onClick={close} aria-label="关闭"><Icon name="close" /></button>
     <span className="modal-kicker">数据与隐私</span><h2 id="privacy-title">你的内容由你控制</h2>
-    <p>授权后，本次输入原文、当前对话最近最多 12 条可用消息和你主动保存的生活偏好会发送给 DeepSeek API，用于理解需求和连续交流。不会附带账号身份、旧医疗档案或其他对话。请勿在输入中填写敏感个人信息。旧版排序授权不会自动启用此功能。生活偏好和对话记录保存在你的账号下。</p>
+    <p>授权后，本次输入原文、当前对话最近最多 12 条可用消息、你主动保存的生活偏好，以及服务端检索到的公开健康生活资料片段会发送给 DeepSeek API，用于理解需求和生成有出处的连续回答。不会附带账号身份、旧医疗档案或其他对话。请勿在输入中填写敏感个人信息。旧版排序授权不会自动启用此功能。生活偏好和对话记录保存在你的账号下。</p>
     <div className="permission"><span><b>DeepSeek 连续对话</b><small>撤回后不再发送新消息，已经发出的请求不受影响</small></span><div><button onClick={() => setPermission("granted")}>授权</button><button onClick={() => setPermission("revoked")}>撤回</button></div></div>
     <div className="modal-actions"><button className="danger-button" onClick={deleteAccount}>删除账号及全部数据</button><button className="primary-button" onClick={close}>完成</button></div>
   </section></div>;

@@ -181,6 +181,26 @@ export async function POST(request: Request) {
     return Response.json({ id: checkinId }, { status: 201 });
   }
 
+  if (action === "update_goal_reminder") {
+    const goalId = String(body.goalId ?? "");
+    const goal = (await database.select({ id: goals.id, subjectId: goals.subjectId }).from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];
+    if (!goal) return Response.json({ error: "not_found" }, { status: 404 });
+    const enabled = body.enabled === true;
+    const hour = Number(body.hour);
+    const minute = Number(body.minute);
+    if (enabled && (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59)) {
+      return Response.json({ error: "invalid_alarm_time" }, { status: 400 });
+    }
+    const reminder = enabled
+      ? { enabled: true, provider: "android_alarm_clock", hour, minute, source: "title", timezone: "device_local" }
+      : { enabled: false, provider: "android_alarm_clock" };
+    await database.batch([
+      database.update(goals).set({ reminderJson: json(reminder), updatedAt: now() }).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))),
+      database.insert(auditEvents).values({ id: id("audit"), ownerUserId: identity.userId, subjectId: goal.subjectId, action: enabled ? "android_alarm_requested" : "android_alarm_disabled", resourceType: "goal", resourceId: goalId, metadataJson: json(enabled ? { hour, minute, source: "title" } : {}) }),
+    ]);
+    return Response.json({ id: goalId, reminder });
+  }
+
   if (action === "delete_goal") {
     const goalId = String(body.goalId ?? "");
     const goal = (await database.select({ id: goals.id, subjectId: goals.subjectId, type: goals.type }).from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];

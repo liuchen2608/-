@@ -229,8 +229,18 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .goal-toggle b{font-size:13px;white-space:nowrap}
 .goal-toggle.is-complete b{color:#795630}
 .goal-card-actions{display:flex;align-items:center;gap:10px}
+.alarm-toggle{min-height:44px!important;border:0!important;background:transparent!important;color:#655b4f!important;padding:8px 10px!important;display:flex!important;align-items:center;gap:8px!important}
+.alarm-toggle:hover{color:#5d4025!important}
+.alarm-toggle:disabled{opacity:.55;cursor:not-allowed}
+.alarm-toggle>.icon{width:18px;height:18px}
+.alarm-toggle b{font-size:12px;white-space:nowrap}
+.alarm-switch{position:relative;width:42px;height:24px;flex:0 0 auto;border:1px solid rgba(23,19,15,.28);border-radius:999px;background:#cfc2af;box-shadow:inset 0 2px 4px rgba(23,19,15,.1);transition:background .22s ease,border-color .22s ease}
+.alarm-switch i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#f7efe4;box-shadow:0 2px 6px rgba(23,19,15,.22);transition:transform .22s ease}
+.alarm-toggle.is-enabled .alarm-switch{border-color:#c88b48;background:#c88b48}
+.alarm-toggle.is-enabled .alarm-switch i{transform:translateX(18px);background:#fffaf2}
 .goal-delete{min-height:40px!important;border:0!important;border-left:1px solid rgba(23,19,15,.18)!important;background:transparent!important;color:#77695a!important;padding:0 4px 0 15px!important;display:inline-flex!important;align-items:center;gap:7px!important;font-size:12px;font-weight:700}
 .goal-delete:hover{color:var(--danger)!important}
 .goal-delete:disabled{opacity:.45;cursor:not-allowed}
 .goal-delete .icon{width:17px;height:17px}
 @media (max-width:900px){.goal-card-actions{width:100%;justify-content:space-between}.goal-toggle{align-self:stretch;justify-content:flex-start!important;padding-inline:0!important}}
+@media (max-width:560px){.goal-card-actions{align-items:stretch;flex-direction:column}.alarm-toggle,.goal-toggle{width:100%;min-width:0!important;padding-inline:0!important}.goal-delete{border-left:0!important;border-top:1px solid rgba(23,19,15,.18)!important;padding:10px 0 0!important}}

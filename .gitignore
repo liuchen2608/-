@@ -21,6 +21,9 @@
 # misc
 .DS_Store
 *.pem
+*.keystore
+*.idsig
+*.tsbuildinfo
 
 # debug
 npm-debug.log*
@@ -39,3 +42,6 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+/android-app/.gradle/
+/android-app/local.properties
+/android-app/app/build/

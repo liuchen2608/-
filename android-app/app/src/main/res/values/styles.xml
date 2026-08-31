@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.DaxiangAbao" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/abao_background</item>
+        <item name="android:statusBarColor">@color/abao_background</item>
+        <item name="android:colorAccent">@color/abao_brass</item>
+    </style>
+</resources>

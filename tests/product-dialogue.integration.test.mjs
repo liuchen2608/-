@@ -68,6 +68,13 @@ test("deployed route: ownership, consent, multi-turn persistence, withdrawal and
     const bootstrap = await request(null, "user-a", "/api/bootstrap");
     assert.equal(bootstrap.status, 200);
     const subjectId = bootstrap.body.subject.id;
+    const goal = await request({ action: "create_goal", subjectId, type: "运动", title: "晚饭后散步" });
+    assert.equal(goal.status, 201);
+    assert.equal((await request({ action: "checkin", goalId: goal.body.id })).status, 201);
+    assert.equal((await request({ action: "delete_goal", goalId: goal.body.id }, "user-b")).status, 404);
+    assert.equal((await request({ action: "delete_goal", goalId: goal.body.id })).status, 200);
+    assert.equal(sqlite.prepare("SELECT count(*) AS n FROM goals WHERE id = ?").get(goal.body.id).n, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS n FROM goal_checkins WHERE goal_id = ?").get(goal.body.id).n, 0);
     const created = await request({ action: "create_conversation", subjectId, title: "我的作息" });
     const conversationId = created.body.id;
     assert.equal(created.status, 201);

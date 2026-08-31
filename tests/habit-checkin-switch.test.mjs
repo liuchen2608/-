@@ -11,5 +11,7 @@ test("habit check-in uses an accessible visual switch", async () => {
   assert.match(page, /今日已完成/);
   assert.match(page, /今日未完成/);
   assert.doesNotMatch(page, /完成今日行动/);
+  assert.match(page, /action: "delete_goal"/);
+  assert.match(page, /确定删除/);
+  assert.match(page, /className="goal-delete"/);
 });
-

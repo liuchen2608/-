@@ -181,6 +181,18 @@ export async function POST(request: Request) {
     return Response.json({ id: checkinId }, { status: 201 });
   }
 
+  if (action === "delete_goal") {
+    const goalId = String(body.goalId ?? "");
+    const goal = (await database.select({ id: goals.id, subjectId: goals.subjectId, type: goals.type }).from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];
+    if (!goal) return Response.json({ error: "not_found" }, { status: 404 });
+    await database.batch([
+      database.delete(goalCheckins).where(and(eq(goalCheckins.goalId, goalId), eq(goalCheckins.ownerUserId, identity.userId))),
+      database.delete(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))),
+      database.insert(auditEvents).values({ id: id("audit"), ownerUserId: identity.userId, subjectId: goal.subjectId, action: "habit_goal_deleted", resourceType: "goal", resourceId: goalId, metadataJson: json({ type: goal.type }) }),
+    ]);
+    return Response.json({ id: goalId, deleted: true });
+  }
+
   return Response.json({ error: "unknown_action" }, { status: 400 });
 }
 

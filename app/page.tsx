@@ -7,7 +7,7 @@ import { getHabitPlanConfirmation, type HabitPlanProposal } from "./habit-plan-i
 import { filterGoalsByType } from "./habit-goal-filter";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
-type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
+type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "trash" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
 type Goal = { id: string; type: string; title: string };
@@ -363,6 +363,7 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
   const [type, setType] = useState("作息");
   const [title, setTitle] = useState("");
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
+  const [deleting, setDeleting] = useState<Set<string>>(() => new Set());
   const visibleGoals = filterGoalsByType(goals, type);
   const create = async () => {
     if (!subjectId || !title.trim()) return;
@@ -372,6 +373,19 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
       await reload();
       setNotice("习惯计划已创建");
     } catch { setNotice("习惯计划暂时无法保存"); }
+  };
+  const remove = async (goal: Goal) => {
+    if (deleting.has(goal.id) || !window.confirm(`确定删除“${goal.title}”吗？删除后无法恢复。`)) return;
+    setDeleting((current) => new Set(current).add(goal.id));
+    try {
+      await request({ action: "delete_goal", goalId: goal.id });
+      setCompleted((current) => { const next = new Set(current); next.delete(goal.id); return next; });
+      await reload();
+      setNotice("习惯计划已删除");
+    } catch {
+      setNotice("习惯计划暂时无法删除");
+      setDeleting((current) => { const next = new Set(current); next.delete(goal.id); return next; });
+    }
   };
   return <div className="page habit-page">
     <PageHeader kicker="一次只改变一件小事" title="习惯计划" description="选择一个方向，写下一项当天可以完成的行动，并用打卡记录坚持情况。" />
@@ -384,13 +398,14 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
       const isComplete = completed.has(goal.id);
       return <article className="goal-card" key={goal.id}>
       <div><span>{goal.type}</span><h2>{goal.title}</h2><p>今天完成后点一下打卡，不需要补做或追求满分。</p></div>
-      <button className={`goal-toggle ${isComplete ? "is-complete" : ""}`} role="switch" aria-checked={isComplete} aria-label={`${goal.title}：${isComplete ? "今日已完成" : "今日未完成"}`} disabled={isComplete} onClick={async () => {
+      <div className="goal-card-actions"><button className={`goal-toggle ${isComplete ? "is-complete" : ""}`} role="switch" aria-checked={isComplete} aria-label={`${goal.title}：${isComplete ? "今日已完成" : "今日未完成"}`} disabled={isComplete} onClick={async () => {
         try {
           await request({ action: "checkin", goalId: goal.id });
           setCompleted((current) => new Set(current).add(goal.id));
           setNotice("今天的行动已记录");
         } catch { setNotice("今天的行动暂时无法记录"); }
       }}><span className="goal-switch" aria-hidden="true"><i /></span><b>{isComplete ? "今日已完成" : "今日未完成"}</b></button>
+      <button className="goal-delete" onClick={() => remove(goal)} disabled={deleting.has(goal.id)}><Icon name="trash" />{deleting.has(goal.id) ? "删除中" : "删除"}</button></div>
     </article>;
     })}</div> : <section className="empty-card"><Icon name="target" /><h2>{type === "日常习惯" ? "还没有习惯计划" : `还没有${type}计划`}</h2><p>从一项十分钟内可以完成的小行动开始。</p></section>}
   </div>;
@@ -495,6 +510,7 @@ function Icon({ name }: { name: IconName }) {
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
     send: <><path d="m22 2-7 20-4-9-9-4z" /><path d="M22 2 11 13" /></>,
     check: <path d="m5 12 4 4L19 6" />,
+    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /><path d="M10 11v5M14 11v5" /></>,
     "chevron-left": <path d="m15 18-6-6 6-6" />,
     "chevron-right": <path d="m9 18 6-6-6-6" />,
     close: <path d="M6 6l12 12M18 6 6 18" />,

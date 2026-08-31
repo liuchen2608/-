@@ -228,4 +228,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .goal-toggle.is-complete .goal-switch i{transform:translateX(24px);background:#fffaf2}
 .goal-toggle b{font-size:13px;white-space:nowrap}
 .goal-toggle.is-complete b{color:#795630}
-@media (max-width:900px){.goal-toggle{align-self:stretch;justify-content:space-between!important;padding-inline:0!important}}
+.goal-card-actions{display:flex;align-items:center;gap:10px}
+.goal-delete{min-height:40px!important;border:0!important;border-left:1px solid rgba(23,19,15,.18)!important;background:transparent!important;color:#77695a!important;padding:0 4px 0 15px!important;display:inline-flex!important;align-items:center;gap:7px!important;font-size:12px;font-weight:700}
+.goal-delete:hover{color:var(--danger)!important}
+.goal-delete:disabled{opacity:.45;cursor:not-allowed}
+.goal-delete .icon{width:17px;height:17px}
+@media (max-width:900px){.goal-card-actions{width:100%;justify-content:space-between}.goal-toggle{align-self:stretch;justify-content:flex-start!important;padding-inline:0!important}}

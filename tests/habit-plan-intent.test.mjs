@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectHabitPlanIntent } from "../app/habit-plan-intent.ts";
+import { detectHabitPlanIntent, getHabitPlanConfirmation } from "../app/habit-plan-intent.ts";
 
 test("detects explicit requests to save a habit plan", () => {
   assert.deepEqual(detectHabitPlanIntent("帮我添加一个晚饭后散步10分钟的计划"), {
@@ -31,4 +31,21 @@ test("supports a plan-first command and never invents a title", () => {
   const proposal = detectHabitPlanIntent(`创建目标：${"早睡".repeat(50)}`);
   assert.equal(proposal?.type, "作息");
   assert.equal(proposal?.title, "");
+});
+
+test("recognizes 放入习惯计划 as an explicit save request", () => {
+  assert.deepEqual(detectHabitPlanIntent("我想下午2点喝水，帮我把计划放入习惯计划中"), {
+    type: "饮食",
+    title: "",
+  });
+});
+
+test("never offers habit-plan confirmation after a safety boundary", () => {
+  const input = "我想下午2点吃药，帮我把计划放入习惯计划中";
+  assert.equal(getHabitPlanConfirmation(input, "boundary_refusal"), null);
+  assert.equal(getHabitPlanConfirmation(input, "safety_stop"), null);
+  assert.deepEqual(getHabitPlanConfirmation("我想下午2点喝水，帮我把计划放入习惯计划中", "recommendation"), {
+    type: "饮食",
+    title: "",
+  });
 });

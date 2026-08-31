@@ -20,6 +20,9 @@ export type GuardResult = {
 export const BOUNDARY_REPLY =
   "这个问题超出了生活方式推荐范围。我不能判断身体状况，也不能给出相关处理方案。你可以告诉我想改善的饮食、作息、运动或日常习惯，我可以帮你整理一份容易开始的生活计划。";
 
+export const MEDICAL_PLAN_BOUNDARY_REPLY =
+  "“习惯计划”只记录饮食、作息、运动和一般日常习惯，不能保存药品、用药、症状或其他医疗内容。请按医疗专业人员提供的指引处理相关事项；如果你想记录喝水、散步或早睡等生活行动，我可以继续帮你添加。";
+
 export const SAFETY_STOP_REPLY =
   "你描述的情况不适合由生活建议助手继续回答。请立即向身边可信赖的人求助，并联系当地紧急求助服务。";
 
@@ -41,6 +44,7 @@ const medicalEntityPattern =
   /糖尿病|高血压|冠心病|心脏病|肾病|肝病|癌症|肿瘤|哮喘|甲亢|痛风|癫痫|抑郁症|焦虑症|患者|病人|孕妇|孕期|备孕|哺乳期|婴儿|儿童|未成年人|老年人|术后|康复期/;
 const medicationNamePattern =
   /[\u4e00-\u9fff]{2,10}(?:林|唑|沙坦|普利|地平|洛尔|汀|霉素|西林)(?=怎么|如何|搭配|早餐|午餐|晚餐|吃|服|用|$)/;
+const planSaveRequestPattern = /(?:添加|加入|保存|创建|建立|设定|记录|放进|放入|放到|加到).{0,18}(?:习惯计划|计划|目标)|(?:习惯计划|计划|目标).{0,18}(?:添加|加入|保存|创建|建立|设定|记录|放进|放入|放到|加到)/;
 const approvedLifestyleTerms = [
   "你好", "您好", "阿宝", "hello", "hi",
   "健康的一天", "日常生活", "时间管理", "早中晚", "晚饭后", "睡觉前", "睡前", "起床后", "饭后", "工作日",
@@ -60,7 +64,7 @@ export function classifyLifestyleRequest(input: string): GuardResult {
     return { category: "安全中止", responseType: "safety_stop", reply: SAFETY_STOP_REPLY };
   }
   if (prohibitedRequestPattern.test(text) || symptomPattern.test(text) || medicalEntityPattern.test(text) || medicationNamePattern.test(text)) {
-    return { category: "边界说明", responseType: "boundary_refusal", reply: BOUNDARY_REPLY };
+    return { category: "边界说明", responseType: "boundary_refusal", reply: planSaveRequestPattern.test(text) ? MEDICAL_PLAN_BOUNDARY_REPLY : BOUNDARY_REPLY };
   }
   // Match the entire greeting; never discard a second clause that may need a safety check.
   const conversationalText = text.normalize("NFKC").replace(/[\s，,。.!！?？、：:；;]/g, "");

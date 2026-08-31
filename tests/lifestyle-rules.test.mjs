@@ -150,3 +150,10 @@ test("keeps explicit non-medical habit requests in scope", () => {
   assert.equal(result.responseType, "recommendation");
   assert.equal(result.category, "习惯");
 });
+
+test("explains why medical content cannot be saved as a habit plan", () => {
+  const result = classifyLifestyleRequest("我想下午2点吃药，帮我把计划放入习惯计划中");
+  assert.equal(result.responseType, "boundary_refusal");
+  assert.match(result.reply, /习惯计划/);
+  assert.match(result.reply, /不能保存.*用药/);
+});

@@ -5,7 +5,7 @@ export type HabitPlanProposal = {
   title: string;
 };
 
-const saveAction = "添加|加入|保存|创建|建立|设定|记录|放进|放到|加到";
+const saveAction = "添加|加入|保存|创建|建立|设定|记录|放进|放入|放到|加到";
 const planNoun = "习惯计划|计划|目标";
 const explicitSavePattern = new RegExp(`(?:${saveAction}).{0,18}(?:${planNoun})|(?:${planNoun}).{0,18}(?:${saveAction})`);
 const negatedSavePattern = new RegExp(`(?:不要|不用|别|取消|暂不|先不|无需).{0,18}(?:${saveAction})`);
@@ -22,4 +22,9 @@ export function detectHabitPlanIntent(input: string): HabitPlanProposal | null {
   if (!content || negatedSavePattern.test(content) || !explicitSavePattern.test(content)) return null;
   // The title is deliberately left empty. The user confirms the exact wording in the modal.
   return { type: inferPlanType(content), title: "" };
+}
+
+export function getHabitPlanConfirmation(input: string, responseType?: string): HabitPlanProposal | null {
+  if (responseType === "boundary_refusal" || responseType === "safety_stop") return null;
+  return detectHabitPlanIntent(input);
 }

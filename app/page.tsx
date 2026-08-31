@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent } from "./lib/ai-consent";
 import { getAdviceViewMode } from "./advice-view-state";
-import { detectHabitPlanIntent, type HabitPlanProposal } from "./habit-plan-intent";
+import { getHabitPlanConfirmation, type HabitPlanProposal } from "./habit-plan-intent";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
 type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
@@ -119,6 +119,7 @@ export default function Home() {
     setConversationId(created.id);
     setConversation(result);
     setPage("生活建议");
+    return result;
   };
   const addProposedPlan = async (proposal: HabitPlanProposal) => {
     const activeSubjectId = subjectId || (await fetchBootstrap()).subject?.id;
@@ -197,7 +198,7 @@ export default function Home() {
   );
 }
 
-function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChange, onPlanIntent, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; setNotice: SetNotice }) {
+function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChange, onPlanIntent, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<Conversation>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; setNotice: SetNotice }) {
   const [text, setText] = useState("");
   const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
   const [sending, setSending] = useState(false);
@@ -212,16 +213,19 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
     setNotice("");
     try {
       await onAuthorize();
+      let responseType: string | undefined;
       if (conversationId) {
         const result = await request<Required<Pick<Conversation, "userMessage" | "assistantMessage">>>({ action: "send_message", conversationId, content, inputType: "text" });
         const nextItems = [...items, result.userMessage, result.assistantMessage];
         setItems(nextItems);
         onChange(nextItems);
+        responseType = result.assistantMessage.responseType;
       } else {
-        await onStart(content);
+        const result = await onStart(content);
+        responseType = result.assistantMessage?.responseType;
       }
       setText("");
-      const proposal = detectHabitPlanIntent(content);
+      const proposal = getHabitPlanConfirmation(content, responseType);
       if (proposal) onPlanIntent(proposal);
     } catch {
       setText(content);

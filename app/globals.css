@@ -210,7 +210,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .plan-confirm-modal{width:min(520px,100%)}
 .plan-proposal{margin-top:22px;padding:20px;border:1px solid rgba(23,19,15,.16);background:#e4d8c7;display:flex;flex-direction:column;gap:9px}
 .plan-proposal span{color:#795630;font-size:11px;font-weight:800;letter-spacing:.16em}
-.plan-proposal strong{font-family:Georgia,"Songti SC","Noto Serif SC",serif;font-size:22px;font-weight:400;line-height:1.55;overflow-wrap:anywhere}
+.plan-proposal label{color:var(--editorial-ink);font-size:13px;font-weight:750}
+.plan-proposal input{width:100%;min-height:54px;border:1px solid rgba(23,19,15,.2);background:#eee5d8;color:var(--editorial-ink);padding:0 14px;font-size:17px}
+.plan-proposal small{align-self:flex-end;color:var(--muted);font-size:11px}
 .plan-confirm-actions{justify-content:flex-end}
 .secondary-button{min-height:46px;padding:0 18px;border:1px solid rgba(23,19,15,.22);background:transparent;color:var(--editorial-ink);font-weight:700}
 .secondary-button:hover{background:rgba(121,86,48,.08)}

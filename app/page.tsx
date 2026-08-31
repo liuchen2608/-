@@ -392,12 +392,14 @@ function PageHeader({ kicker, title, description }: { kicker: string; title: str
 function HabitPlanConfirmModal({ proposal, close, confirm }: { proposal: HabitPlanProposal; close: () => void; confirm: (proposal: HabitPlanProposal) => Promise<void> }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [title, setTitle] = useState("");
   const submit = async () => {
-    if (saving) return;
+    const trimmedTitle = title.trim();
+    if (saving || !trimmedTitle) return;
     setSaving(true);
     setError("");
     try {
-      await confirm(proposal);
+      await confirm({ ...proposal, title: trimmedTitle });
     } catch {
       setError("计划暂时无法添加，请稍后重试");
       setSaving(false);
@@ -408,12 +410,17 @@ function HabitPlanConfirmModal({ proposal, close, confirm }: { proposal: HabitPl
     <button className="close-button" onClick={close} disabled={saving} aria-label="关闭"><Icon name="close" /></button>
     <span className="modal-kicker">习惯计划</span>
     <h2 id="plan-confirm-title">要把这项行动加入计划吗？</h2>
-    <p>确认后会添加到“习惯计划”；取消不会保存。</p>
-    <div className="plan-proposal"><span>{proposal.type}</span><strong>{proposal.title}</strong></div>
+    <p>请填写准确的计划标题。确认后会添加到“习惯计划”；取消不会保存。</p>
+    <div className="plan-proposal">
+      <span>{proposal.type}</span>
+      <label htmlFor="plan-title">计划标题</label>
+      <input id="plan-title" value={title} onChange={(event) => setTitle(event.target.value)} disabled={saving} maxLength={80} placeholder="例如：下午四点洗澡" />
+      <small>{title.length}/80</small>
+    </div>
     {error && <p className="plan-confirm-error" role="alert">{error}</p>}
     <div className="modal-actions plan-confirm-actions">
       <button className="secondary-button" onClick={close} disabled={saving}>取消</button>
-      <button className="primary-button" onClick={submit} disabled={saving}>{saving ? "添加中" : "确认添加"}</button>
+      <button className="primary-button" onClick={submit} disabled={saving || !title.trim()}>{saving ? "添加中" : "确认添加"}</button>
     </div>
   </section></div>;
 }

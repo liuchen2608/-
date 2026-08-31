@@ -17,23 +17,9 @@ function inferPlanType(content: string): HabitPlanType {
   return "日常习惯";
 }
 
-function extractPlanTitle(content: string) {
-  let title = content
-    .replace(/[。！!？?]+$/g, "")
-    .replace(/^(?:请|麻烦)?(?:帮我)?(?:把|将)/, "")
-    .replace(/^(?:请|麻烦|帮我)?(?:想要|我要|我想|要|能不能|可以)?(?:帮我)?(?:添加|加入|保存|创建|建立|设定|记录|放进|放到|加到)(?:一个|一项|一份)?(?:习惯计划|计划|目标)?[：:，,\s]*/, "")
-    .replace(/(?:的)?(?:计划|目标)?(?:添加|加入|保存|创建|建立|设定|记录|放进|放到|加到)(?:我的)?习惯计划(?:中|里)?(?:吧)?$/g, "")
-    .replace(/(?:的)?(?:习惯计划|计划|目标)(?:中|里)?(?:吧)?$/g, "")
-    .replace(/^[：:，,\s]+|[：:，,\s]+$/g, "")
-    .trim();
-
-  if (!title) title = "从今天开始坚持一项小行动";
-  return title.slice(0, 80);
-}
-
 export function detectHabitPlanIntent(input: string): HabitPlanProposal | null {
   const content = input.trim().replace(/\s+/g, " ");
   if (!content || negatedSavePattern.test(content) || !explicitSavePattern.test(content)) return null;
-  return { type: inferPlanType(content), title: extractPlanTitle(content) };
+  // The title is deliberately left empty. The user confirms the exact wording in the modal.
+  return { type: inferPlanType(content), title: "" };
 }
-

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent } from "./lib/ai-consent";
 import { getAdviceViewMode } from "./advice-view-state";
+import { detectHabitPlanIntent, type HabitPlanProposal } from "./habit-plan-intent";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
 type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
@@ -53,6 +54,7 @@ export default function Home() {
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [conversationId, setConversationId] = useState("");
+  const [planProposal, setPlanProposal] = useState<HabitPlanProposal | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -118,6 +120,23 @@ export default function Home() {
     setConversation(result);
     setPage("生活建议");
   };
+  const addProposedPlan = async (proposal: HabitPlanProposal) => {
+    const activeSubjectId = subjectId || (await fetchBootstrap()).subject?.id;
+    if (!activeSubjectId) throw new Error("profile_unavailable");
+    await request({
+      action: "create_goal",
+      subjectId: activeSubjectId,
+      type: proposal.type,
+      title: proposal.title,
+      plan: { cycle: "weekly", dailyAction: proposal.title, checkin: "manual" },
+      reminder: { enabled: false },
+    });
+    await load();
+    setPlanProposal(null);
+    setPage("习惯计划");
+    setNotice("已添加到习惯计划");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <main className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
@@ -163,7 +182,7 @@ export default function Home() {
 
         <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
           <section className="advice-panel" hidden={page !== "生活建议"}>
-            <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} setNotice={setNotice} />
+            <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} onPlanIntent={setPlanProposal} setNotice={setNotice} />
           </section>
           {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
           {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
@@ -173,11 +192,12 @@ export default function Home() {
       {notice && <div className="toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="关闭提示"><Icon name="close" /></button></div>}
       {privacy && <PrivacyModal close={() => setPrivacy(false)} subjectId={subjectId} reload={load} setNotice={setNotice} />}
       {history && <HistoryModal close={() => setHistory(false)} openConversation={openConversation} />}
+      {planProposal && <HabitPlanConfirmModal proposal={planProposal} close={() => setPlanProposal(null)} confirm={addProposedPlan} />}
     </main>
   );
 }
 
-function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChange, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; setNotice: SetNotice }) {
+function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChange, onPlanIntent, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<void>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; setNotice: SetNotice }) {
   const [text, setText] = useState("");
   const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
   const [sending, setSending] = useState(false);
@@ -201,6 +221,8 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
         await onStart(content);
       }
       setText("");
+      const proposal = detectHabitPlanIntent(content);
+      if (proposal) onPlanIntent(proposal);
     } catch {
       setText(content);
       setNotice("消息未能完成发送，输入已保留，请稍后重试或重新登录");
@@ -365,6 +387,35 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
 
 function PageHeader({ kicker, title, description }: { kicker: string; title: string; description: string }) {
   return <header className="page-header"><span>{kicker}</span><h1>{title}</h1><p>{description}</p></header>;
+}
+
+function HabitPlanConfirmModal({ proposal, close, confirm }: { proposal: HabitPlanProposal; close: () => void; confirm: (proposal: HabitPlanProposal) => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await confirm(proposal);
+    } catch {
+      setError("计划暂时无法添加，请稍后重试");
+      setSaving(false);
+    }
+  };
+
+  return <div className="overlay"><section className="modal plan-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="plan-confirm-title">
+    <button className="close-button" onClick={close} disabled={saving} aria-label="关闭"><Icon name="close" /></button>
+    <span className="modal-kicker">习惯计划</span>
+    <h2 id="plan-confirm-title">要把这项行动加入计划吗？</h2>
+    <p>确认后会添加到“习惯计划”；取消不会保存。</p>
+    <div className="plan-proposal"><span>{proposal.type}</span><strong>{proposal.title}</strong></div>
+    {error && <p className="plan-confirm-error" role="alert">{error}</p>}
+    <div className="modal-actions plan-confirm-actions">
+      <button className="secondary-button" onClick={close} disabled={saving}>取消</button>
+      <button className="primary-button" onClick={submit} disabled={saving}>{saving ? "添加中" : "确认添加"}</button>
+    </div>
+  </section></div>;
 }
 
 function PrivacyModal({ close, subjectId, reload, setNotice }: { close: () => void; subjectId: string; reload: () => Promise<void>; setNotice: SetNotice }) {

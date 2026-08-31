@@ -206,3 +206,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 
 .advice-panel{width:100%;display:flex}
 .advice-panel[hidden]{display:none}
+
+.plan-confirm-modal{width:min(520px,100%)}
+.plan-proposal{margin-top:22px;padding:20px;border:1px solid rgba(23,19,15,.16);background:#e4d8c7;display:flex;flex-direction:column;gap:9px}
+.plan-proposal span{color:#795630;font-size:11px;font-weight:800;letter-spacing:.16em}
+.plan-proposal strong{font-family:Georgia,"Songti SC","Noto Serif SC",serif;font-size:22px;font-weight:400;line-height:1.55;overflow-wrap:anywhere}
+.plan-confirm-actions{justify-content:flex-end}
+.secondary-button{min-height:46px;padding:0 18px;border:1px solid rgba(23,19,15,.22);background:transparent;color:var(--editorial-ink);font-weight:700}
+.secondary-button:hover{background:rgba(121,86,48,.08)}
+.secondary-button:disabled,.close-button:disabled{opacity:.45;cursor:not-allowed}
+.plan-confirm-error{margin:12px 0 0;color:var(--danger)!important;font-size:13px}

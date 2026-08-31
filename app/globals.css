@@ -218,3 +218,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .secondary-button:hover{background:rgba(121,86,48,.08)}
 .secondary-button:disabled,.close-button:disabled{opacity:.45;cursor:not-allowed}
 .plan-confirm-error{margin:12px 0 0;color:var(--danger)!important;font-size:13px}
+
+.goal-toggle{min-width:168px!important;justify-content:flex-start!important;gap:12px!important;border:0!important;background:transparent!important;color:#655b4f!important;padding:8px 10px!important}
+.goal-toggle:hover{color:#5d4025!important}
+.goal-toggle:disabled{cursor:default;opacity:1}
+.goal-switch{position:relative;width:54px;height:30px;flex:0 0 auto;border:1px solid rgba(23,19,15,.28);border-radius:999px;background:#cfc2af;box-shadow:inset 0 2px 5px rgba(23,19,15,.12);transition:background .22s ease,border-color .22s ease}
+.goal-switch i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#f7efe4;box-shadow:0 2px 7px rgba(23,19,15,.24);transition:transform .22s ease}
+.goal-toggle.is-complete .goal-switch{border-color:#795630;background:#795630}
+.goal-toggle.is-complete .goal-switch i{transform:translateX(24px);background:#fffaf2}
+.goal-toggle b{font-size:13px;white-space:nowrap}
+.goal-toggle.is-complete b{color:#795630}
+@media (max-width:900px){.goal-toggle{align-self:stretch;justify-content:space-between!important;padding-inline:0!important}}

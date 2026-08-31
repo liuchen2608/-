@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent } from "./lib/ai-consent";
 import { getAdviceViewMode } from "./advice-view-state";
 import { getHabitPlanConfirmation, type HabitPlanProposal } from "./habit-plan-intent";
+import { filterGoalsByType } from "./habit-goal-filter";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
 type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
@@ -362,6 +363,7 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
   const [type, setType] = useState("作息");
   const [title, setTitle] = useState("");
   const [completed, setCompleted] = useState<Set<string>>(() => new Set());
+  const visibleGoals = filterGoalsByType(goals, type);
   const create = async () => {
     if (!subjectId || !title.trim()) return;
     try {
@@ -378,14 +380,19 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
       <label><span>我的行动</span><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={80} placeholder="例如：晚饭后散步 10 分钟" /></label>
       <button className="primary-button" onClick={create} disabled={!title.trim()}>创建计划</button>
     </section>
-    {goals.length ? <div className="goal-list">{goals.map((goal) => <article className="goal-card" key={goal.id}>
+    {visibleGoals.length ? <div className="goal-list">{visibleGoals.map((goal) => {
+      const isComplete = completed.has(goal.id);
+      return <article className="goal-card" key={goal.id}>
       <div><span>{goal.type}</span><h2>{goal.title}</h2><p>今天完成后点一下打卡，不需要补做或追求满分。</p></div>
-      <button className={completed.has(goal.id) ? "is-complete" : ""} disabled={completed.has(goal.id)} onClick={async () => {
-        await request({ action: "checkin", goalId: goal.id });
-        setCompleted((current) => new Set(current).add(goal.id));
-        setNotice("今天的行动已记录");
-      }}><Icon name="check" />{completed.has(goal.id) ? "今天已完成" : "完成今日行动"}</button>
-    </article>)}</div> : <section className="empty-card"><Icon name="target" /><h2>还没有习惯计划</h2><p>从一项十分钟内可以完成的小行动开始。</p></section>}
+      <button className={`goal-toggle ${isComplete ? "is-complete" : ""}`} role="switch" aria-checked={isComplete} aria-label={`${goal.title}：${isComplete ? "今日已完成" : "今日未完成"}`} disabled={isComplete} onClick={async () => {
+        try {
+          await request({ action: "checkin", goalId: goal.id });
+          setCompleted((current) => new Set(current).add(goal.id));
+          setNotice("今天的行动已记录");
+        } catch { setNotice("今天的行动暂时无法记录"); }
+      }}><span className="goal-switch" aria-hidden="true"><i /></span><b>{isComplete ? "今日已完成" : "今日未完成"}</b></button>
+    </article>;
+    })}</div> : <section className="empty-card"><Icon name="target" /><h2>{type === "日常习惯" ? "还没有习惯计划" : `还没有${type}计划`}</h2><p>从一项十分钟内可以完成的小行动开始。</p></section>}
   </div>;
 }
 

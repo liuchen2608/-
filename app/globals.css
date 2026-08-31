@@ -203,3 +203,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .rag-sources a{color:inherit;text-underline-offset:3px}
 .rag-sources a:hover{color:var(--primary-strong)}
 .rag-sources a:focus-visible{outline:2px solid rgba(200,139,72,.58);outline-offset:3px}
+
+.advice-panel{width:100%;display:flex}
+.advice-panel[hidden]{display:none}

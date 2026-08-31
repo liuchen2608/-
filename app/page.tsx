@@ -5,7 +5,7 @@ import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent }
 import { getAdviceViewMode } from "./advice-view-state";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
-type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
+type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
 type Goal = { id: string; type: string; title: string };
@@ -16,7 +16,6 @@ type BootstrapData = { subject?: Subject; consents?: Consent[]; goals?: Goal[] }
 type SetNotice = (message: string) => void;
 
 const nav: Array<{ label: PageName; icon: IconName }> = [
-  { label: "生活建议", icon: "chat" },
   { label: "生活偏好", icon: "sliders" },
   { label: "习惯计划", icon: "target" },
 ];
@@ -124,7 +123,7 @@ export default function Home() {
     <main className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-head">
-          <button className="brand" onClick={newConversation} aria-label="返回大象阿宝首页">
+          <button className="brand" onClick={() => go("生活建议")} aria-label="返回首页并保留当前对话">
             <LogoMark />
             <span><b>大象阿宝</b><small>健康生活助手</small></span>
           </button>
@@ -133,10 +132,13 @@ export default function Home() {
           </button>
         </div>
         <nav aria-label="主要功能">
-          <button className={page === "生活建议" ? "active" : ""} onClick={newConversation}>
+          <button className={page === "生活建议" ? "active" : ""} onClick={() => go("生活建议")}>
+            <Icon name="home" /><span>首页</span>
+          </button>
+          <button onClick={newConversation}>
             <Icon name="chat" /><span>新对话</span>
           </button>
-          {nav.slice(1).map((item) => (
+          {nav.map((item) => (
             <button key={item.label} className={page === item.label ? "active" : ""} onClick={() => go(item.label)}>
               <Icon name={item.icon} /><span>{item.label}</span>
             </button>
@@ -151,7 +153,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <button className="mobile-menu" onClick={toggle} aria-label="切换导航"><Icon name="menu" /></button>
-          <button className="product-title" onClick={newConversation}>大象阿宝 <span>健康生活助手</span></button>
+          <button className="product-title" onClick={() => go("生活建议")}>大象阿宝 <span>健康生活助手</span></button>
           <div className="top-actions">
             <span className="scope-badge">只提供生活方式推荐</span>
             <button className="icon-button" onClick={() => setHistory(true)} aria-label="打开建议记录"><Icon name="history" /></button>
@@ -160,7 +162,9 @@ export default function Home() {
         </header>
 
         <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
-          {page === "生活建议" && <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} setNotice={setNotice} />}
+          <section className="advice-panel" hidden={page !== "生活建议"}>
+            <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} setNotice={setNotice} />
+          </section>
           {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
           {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
         </div>
@@ -413,6 +417,7 @@ function LogoMark() { return <span className="logo-mark" aria-hidden="true" />; 
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
+    home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></>,
     chat: <><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /><path d="M8 9h8M8 13h5" /></>,
     sliders: <><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" /><path d="M1 14h6M9 8h6M17 16h6" /></>,
     target: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><path d="M12 3v3M21 12h-3" /></>,

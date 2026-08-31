@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent } from "./lib/ai-consent";
+import { getAdviceViewMode } from "./advice-view-state";
 
 type PageName = "生活建议" | "生活偏好" | "习惯计划";
 type IconName = "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
@@ -177,6 +178,7 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
   const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
   const [sending, setSending] = useState(false);
   const [pendingText, setPendingText] = useState("");
+  const showWelcome = getAdviceViewMode(items.length, sending) === "welcome";
 
   const submit = async (value?: string) => {
     const content = (value ?? text).trim();
@@ -216,7 +218,7 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
   return (
     <div className="chat-page">
       <div className="chat-scroll">
-        {!items.length ? (
+        {showWelcome ? (
           <section className="welcome">
             <div className="welcome-mark"><LogoMark /></div>
             <span className="eyebrow">今天从一件小事开始</span>
@@ -232,7 +234,7 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
             <div className="scope-note"><Icon name="check" /><span>只讨论日常生活方式，不判断身体问题，不提供相关处理方案。</span></div>
           </section>
         ) : (
-          <div className="conversation">
+          <div className={`conversation ${sending ? "is-pending" : ""}`}>
             {items.map((message, index) => message.role === "user" ? (
               <div className="user-message" key={message.id ?? index}>{message.content}</div>
             ) : (
@@ -258,14 +260,14 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
                 </div>
               </article>
             ))}
+            {sending && <div className="user-message">{pendingText}</div>}
+            {sending && <div className="thinking-card" role="status" aria-live="polite">
+              <LogoMark />
+              <span><b>阿宝正在整理生活建议</b><small>会先从一件容易开始的小事说起</small></span>
+              <i className="thinking-dots" aria-hidden="true"><i /><i /><i /></i>
+            </div>}
           </div>
         )}
-        {sending && <div className="user-message">{pendingText}</div>}
-        {sending && <div className="thinking-card" role="status" aria-live="polite">
-          <LogoMark />
-          <span><b>阿宝正在整理生活建议</b><small>会先从一件容易开始的小事说起</small></span>
-          <i className="thinking-dots" aria-hidden="true"><i /><i /><i /></i>
-        </div>}
       </div>
       <div className="chat-dock">
         <div className="composer">

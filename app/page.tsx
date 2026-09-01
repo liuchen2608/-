@@ -387,7 +387,7 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
       const deletion = request({ action: "delete_goal", goalId: goal.id });
       if (hadAlarm && /Android/i.test(navigator.userAgent)) {
         setNotice("正在打开系统闹钟，请确认删除对应闹钟");
-        window.location.assign(buildAndroidAlarmIntent({ operation: "show", goalId: goal.id, title: goal.title, fallbackUrl: new URL("/downloads/daxiang-abao-alarm.apk", window.location.origin).href }));
+        window.location.assign(buildAndroidAlarmIntent({ operation: "show", goalId: goal.id, title: goal.title, fallbackUrl: new URL("/download/android", window.location.origin).href }));
       }
       await deletion;
       setCompleted((current) => { const next = new Set(current); next.delete(goal.id); return next; });
@@ -412,7 +412,7 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
     const enabled = readAlarmEnabled(goal.reminderJson);
     setAlarmBusy((current) => new Set(current).add(goal.id));
     try {
-      const fallbackUrl = new URL("/downloads/daxiang-abao-alarm.apk", window.location.origin).href;
+      const fallbackUrl = new URL("/download/android", window.location.origin).href;
       const update = request({ action: "update_goal_reminder", goalId: goal.id, enabled: !enabled, hour: alarmTime.hour, minute: alarmTime.minute });
       if (enabled) {
         setNotice("正在打开系统闹钟，请确认删除对应闹钟");

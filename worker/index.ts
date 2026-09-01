@@ -32,6 +32,19 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname === "/download/android" && (request.method === "GET" || request.method === "HEAD")) {
+      const assetUrl = new URL("/downloads/daxiang-abao-alarm.apk", request.url);
+      const asset = await env.ASSETS.fetch(new Request(assetUrl, { method: "GET" }));
+      if (!asset.ok || !asset.body) return new Response("Android 安装包暂时无法下载", { status: 503 });
+
+      const headers = new Headers(asset.headers);
+      headers.set("content-type", "application/vnd.android.package-archive");
+      headers.set("content-disposition", 'attachment; filename="daxiang-abao-alarm.apk"');
+      headers.set("cache-control", "public, max-age=3600");
+      headers.set("x-content-type-options", "nosniff");
+      return new Response(request.method === "HEAD" ? null : asset.body, { status: 200, headers });
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {

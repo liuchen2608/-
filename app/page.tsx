@@ -56,6 +56,7 @@ export default function Home() {
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [conversationId, setConversationId] = useState("");
+  const [newConversationVersion, setNewConversationVersion] = useState(0);
   const [planProposal, setPlanProposal] = useState<HabitPlanProposal | null>(null);
 
   const load = useCallback(async () => {
@@ -85,7 +86,9 @@ export default function Home() {
   const newConversation = () => {
     setConversation(null);
     setConversationId("");
+    setNewConversationVersion((current) => current + 1);
     go("生活建议");
+    setNotice("已开始新对话");
   };
   const openConversation = async (id: string) => {
     try {
@@ -185,7 +188,7 @@ export default function Home() {
 
         <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
           <section className="advice-panel" hidden={page !== "生活建议"}>
-            <AdvicePage key={conversationId || conversation?.assistantMessage?.content || "new"} conversation={conversation} conversationId={conversationId} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} onPlanIntent={setPlanProposal} setNotice={setNotice} />
+            <AdvicePage key={`${conversationId || "new"}:${newConversationVersion}`} conversation={conversation} conversationId={conversationId} autoFocusComposer={!conversationId && newConversationVersion > 0} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} onPlanIntent={setPlanProposal} setNotice={setNotice} />
           </section>
           {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
           {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
@@ -200,7 +203,7 @@ export default function Home() {
   );
 }
 
-function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChange, onPlanIntent, setNotice }: { conversation: Conversation | null; conversationId: string; onStart: (text: string) => Promise<Conversation>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; setNotice: SetNotice }) {
+function AdvicePage({ conversation, conversationId, autoFocusComposer, onStart, onAuthorize, onChange, onPlanIntent, setNotice }: { conversation: Conversation | null; conversationId: string; autoFocusComposer: boolean; onStart: (text: string) => Promise<Conversation>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; setNotice: SetNotice }) {
   const [text, setText] = useState("");
   const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
   const [sending, setSending] = useState(false);
@@ -304,7 +307,7 @@ function AdvicePage({ conversation, conversationId, onStart, onAuthorize, onChan
       <div className="chat-dock">
         <div className="composer">
           <label htmlFor="advice-input">你想改善什么？</label>
-          <textarea id="advice-input" value={text} disabled={sending} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+          <textarea id="advice-input" value={text} disabled={sending} autoFocus={autoFocusComposer} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); submit(); }
           }} placeholder="例如：我晚上总是很晚睡，想调整作息" maxLength={2000} />
           <div><small>{text.length}/2000</small><button className="send-button" onClick={() => submit()} disabled={sending || !text.trim()} aria-label="发送问题"><Icon name="send" />{sending ? "生成中" : "发送"}</button></div>

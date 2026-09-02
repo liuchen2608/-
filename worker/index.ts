@@ -33,7 +33,7 @@ const worker = {
     const url = new URL(request.url);
 
     if (url.pathname === "/download/android" && (request.method === "GET" || request.method === "HEAD")) {
-      const downloadName = "daxiang-abao-alarm-xiaomi12spro-v1.1.4.apk";
+      const downloadName = "daxiang-abao-mobile-xiaomi12spro-v1.2.0.apk";
       const assetUrl = new URL(`/downloads/${downloadName}`, request.url);
       const asset = await env.ASSETS.fetch(new Request(assetUrl, { method: "GET" }));
       if (!asset.ok || !asset.body) return new Response("Android 安装包暂时无法下载", { status: 503 });

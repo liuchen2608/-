@@ -5,13 +5,14 @@ plugins {
 android {
     namespace = "com.daxiangabao.health"
     compileSdk = 35
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.daxiangabao.health"
         minSdk = 23
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.1.4"
+        versionCode = 7
+        versionName = "1.2.0"
     }
 
     buildTypes {

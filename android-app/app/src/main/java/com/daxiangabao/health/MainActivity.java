@@ -17,6 +17,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -30,8 +31,21 @@ import android.widget.TextView;
 import android.widget.TimePicker;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+
 public final class MainActivity extends Activity {
-    private static final String HOME_URL = "https://daxiang-abao-health.caokhoiq2.chatgpt.site/";
+    private static final String HOME_URL = "file:///android_asset/mobile/index.html";
+    private static final String SETTINGS = "abao_mobile_settings";
+    private static final String DEEPSEEK_KEY = "deepseek_api_key";
     private static final int INK = Color.rgb(31, 25, 20);
     private static final int MUTED = Color.rgb(105, 95, 83);
     private static final int PAPER = Color.rgb(242, 234, 223);
@@ -68,7 +82,7 @@ public final class MainActivity extends Activity {
             handleAlarmLink(link);
             return;
         }
-        showHome();
+        showWebsiteInApp();
     }
 
     private void handleAlarmLink(Uri link) {
@@ -151,7 +165,7 @@ public final class MainActivity extends Activity {
         body.setPadding(0, dp(12), 0, dp(22));
         card.addView(body);
 
-        Button openHome = button("进入大象阿宝主页  →", BROWN, Color.WHITE);
+        Button openHome = button("进入大象阿宝  →", BROWN, Color.WHITE);
         openHome.setOnClickListener(view -> showWebsiteInApp());
         card.addView(openHome, matchHeight(dp(52)));
         return card;
@@ -258,21 +272,22 @@ public final class MainActivity extends Activity {
             if (websiteView != null) websiteView.reload();
         });
         toolbar.addView(refresh, new LinearLayout.LayoutParams(dp(68), dp(48)));
-        shell.addView(toolbar, matchWrap());
+        // The packaged mobile page owns its header and navigation; keep the native toolbar hidden.
 
         websiteView = new WebView(this);
         websiteView.setBackgroundColor(PAPER);
         WebSettings settings = websiteView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(false);
+        settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.setSafeBrowsingEnabled(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(websiteView, true);
+        CookieManager.getInstance().setAcceptCookie(false);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(websiteView, false);
+        websiteView.addJavascriptInterface(new AppBridge(), "AbaoAndroid");
         websiteView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -365,11 +380,17 @@ public final class MainActivity extends Activity {
                 return true;
             }
             Uri link = Uri.parse(target);
+            if ("file".equals(link.getScheme())) return false;
             if ("daxiangabao".equals(link.getScheme())) {
                 handleAlarmLink(link);
                 return true;
             }
-            return !("http".equals(link.getScheme()) || "https".equals(link.getScheme()));
+            if ("http".equals(link.getScheme()) || "https".equals(link.getScheme())) {
+                startActivity(new Intent(Intent.ACTION_VIEW, link));
+                return true;
+            }
+            Toast.makeText(this, "不支持打开这个外部链接", Toast.LENGTH_LONG).show();
+            return true;
         } catch (Exception error) {
             Toast.makeText(this, "这个页面暂时无法打开", Toast.LENGTH_LONG).show();
             return true;
@@ -381,6 +402,115 @@ public final class MainActivity extends Activity {
         websiteView.stopLoading();
         websiteView.destroy();
         websiteView = null;
+    }
+
+    private void deepSeekCallback(String requestId, String resultJson) {
+        if (websiteView == null) return;
+        String script = "window.AbaoApp && window.AbaoApp.receiveDeepSeek(" + JSONObject.quote(requestId) + "," + resultJson + ")";
+        runOnUiThread(() -> websiteView.evaluateJavascript(script, null));
+    }
+
+    private final class AppBridge {
+        @JavascriptInterface
+        public void setAlarm(String title, int hour, int minute) {
+            String safeTitle = title == null || title.trim().isEmpty() ? "生活计划" : title.trim();
+            runOnUiThread(() -> createAlarm(hour, minute, safeTitle));
+        }
+
+        @JavascriptInterface
+        public void showAlarms() {
+            runOnUiThread(() -> openClock(new Intent(AlarmClock.ACTION_SHOW_ALARMS), "无法打开系统闹钟列表"));
+        }
+
+        @JavascriptInterface
+        public boolean hasDeepSeekKey() {
+            return !getSharedPreferences(SETTINGS, MODE_PRIVATE).getString(DEEPSEEK_KEY, "").isEmpty();
+        }
+
+        @JavascriptInterface
+        public void saveDeepSeekKey(String key) {
+            String clean = key == null ? "" : key.trim();
+            getSharedPreferences(SETTINGS, MODE_PRIVATE).edit().putString(DEEPSEEK_KEY, clean).apply();
+        }
+
+        @JavascriptInterface
+        public void clearDeepSeekKey() {
+            getSharedPreferences(SETTINGS, MODE_PRIVATE).edit().remove(DEEPSEEK_KEY).apply();
+        }
+
+        @JavascriptInterface
+        public void sendDeepSeek(String requestId, String prompt, String historyJson) {
+            String key = getSharedPreferences(SETTINGS, MODE_PRIVATE).getString(DEEPSEEK_KEY, "");
+            if (key.isEmpty()) {
+                deepSeekCallback(requestId, deepSeekError("missing_key"));
+                return;
+            }
+            new Thread(() -> requestDeepSeek(requestId, key, prompt, historyJson)).start();
+        }
+    }
+
+    private void requestDeepSeek(String requestId, String key, String prompt, String historyJson) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL("https://api.deepseek.com/chat/completions").openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(30000);
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Authorization", "Bearer " + key);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+
+            JSONArray messages = new JSONArray();
+            messages.put(new JSONObject().put("role", "system").put("content", "你是大象阿宝，只提供普通成年人的饮食、作息、运动和日常习惯建议。回答简短、温和、可执行；不诊断、不推荐药物、不处理医疗问题。"));
+            try {
+                JSONArray history = new JSONArray(historyJson == null ? "[]" : historyJson);
+                for (int index = Math.max(0, history.length() - 8); index < history.length(); index++) {
+                    JSONObject item = history.optJSONObject(index);
+                    if (item == null) continue;
+                    String role = item.optString("role");
+                    String content = item.optString("content").trim();
+                    if (("user".equals(role) || "assistant".equals(role)) && !content.isEmpty()) {
+                        messages.put(new JSONObject().put("role", role).put("content", content));
+                    }
+                }
+            } catch (Exception ignored) {
+                // Malformed local history must not block the current message.
+            }
+            messages.put(new JSONObject().put("role", "user").put("content", prompt));
+            JSONObject payload = new JSONObject().put("model", "deepseek-chat").put("temperature", 0.4).put("max_tokens", 600).put("messages", messages);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+            }
+
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+            String responseBody = readAll(stream);
+            if (status < 200 || status >= 300) {
+                deepSeekCallback(requestId, deepSeekError("http_" + status));
+                return;
+            }
+            JSONObject response = new JSONObject(responseBody);
+            String content = response.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim();
+            deepSeekCallback(requestId, new JSONObject().put("ok", true).put("content", content).toString());
+        } catch (Exception error) {
+            deepSeekCallback(requestId, deepSeekError("network_error"));
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static String readAll(InputStream stream) throws Exception {
+        if (stream == null) return "";
+        StringBuilder result = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) result.append(line);
+        }
+        return result.toString();
+    }
+
+    private static String deepSeekError(String code) {
+        return "{\"ok\":false,\"error\":" + JSONObject.quote(code) + "}";
     }
 
     @Override

@@ -218,6 +218,40 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .secondary-button:hover{background:rgba(121,86,48,.08)}
 .secondary-button:disabled,.close-button:disabled{opacity:.45;cursor:not-allowed}
 .plan-confirm-error{margin:12px 0 0;color:var(--danger)!important;font-size:13px}
+.alarm-confirm-modal{width:min(620px,100%)}
+.alarm-proposal-grid{display:grid;grid-template-columns:1fr 160px;gap:14px;margin-top:22px;padding:20px;border:1px solid rgba(23,19,15,.16);background:#e4d8c7}
+.alarm-proposal-grid label{display:flex;flex-direction:column;gap:8px}
+.alarm-proposal-grid label:first-child{grid-column:1/-1}
+.alarm-proposal-grid span{color:var(--editorial-ink);font-size:13px;font-weight:750}
+.alarm-proposal-grid input,.alarm-proposal-grid select{width:100%;min-height:50px;border:1px solid rgba(23,19,15,.2);background:#eee5d8;color:var(--editorial-ink);padding:0 13px;font-size:16px}
+.system-alarm-permission{width:100%;margin-top:14px;padding:15px 16px;border:1px solid rgba(23,19,15,.18);background:rgba(238,229,216,.62);color:var(--editorial-ink);display:flex;align-items:center;justify-content:space-between;gap:18px;text-align:left}
+.system-alarm-permission>span{display:grid;grid-template-columns:24px 1fr;gap:3px 9px;align-items:center}
+.system-alarm-permission .icon{grid-row:1/3;width:21px;height:21px;color:#795630}
+.system-alarm-permission b{font-size:14px}
+.system-alarm-permission small{color:var(--muted);font-size:12px;line-height:1.45}
+.system-alarm-permission.is-enabled .alarm-switch{border-color:#c88b48;background:#c88b48}
+.system-alarm-permission.is-enabled .alarm-switch i{transform:translateX(18px);background:#fffaf2}
+.alarm-system-note{margin:10px 0 0!important;color:var(--muted)!important;font-size:12px!important;line-height:1.55!important}
+
+.alarm-page-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 20px;border:1px solid rgba(23,19,15,.15);background:#eee5d8}
+.alarm-page-toolbar>span{display:flex;align-items:center;gap:9px;color:#795630}
+.alarm-page-toolbar .icon{width:20px;height:20px}
+.alarm-list{display:grid;gap:13px;margin-top:20px}
+.alarm-item{display:grid;grid-template-columns:120px minmax(0,1fr) auto;align-items:center;gap:22px;padding:22px;border:1px solid rgba(23,19,15,.14);background:#eee5d8;box-shadow:0 16px 45px rgba(23,19,15,.08)}
+.alarm-time{display:flex;align-items:center;gap:10px;color:#795630}
+.alarm-time .icon{width:22px;height:22px}
+.alarm-time strong{font-family:Georgia,"Noto Serif SC",serif;font-size:27px;font-weight:400;font-variant-numeric:tabular-nums}
+.alarm-item span{color:#795630;font-size:11px;font-weight:800;letter-spacing:.12em}
+.alarm-item h2{margin:5px 0 6px;font-family:Georgia,"Noto Serif SC",serif;font-size:20px;font-weight:400}
+.alarm-item p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}
+.alarm-connection-toggle{min-width:132px;min-height:52px;padding:8px 12px;border:1px solid rgba(23,19,15,.16);border-radius:14px;background:rgba(247,239,228,.56);color:#655b4f;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}
+.alarm-connection-toggle:hover{border-color:rgba(121,86,48,.38);color:#5d4025;box-shadow:0 8px 22px rgba(23,19,15,.08)}
+.alarm-connection-toggle.is-enabled{border-color:rgba(121,86,48,.34);background:#e6d8c5;color:#795630}
+.alarm-connection-toggle.is-enabled .alarm-switch{border-color:#2f765d;background:#2f765d}
+.alarm-connection-toggle.is-enabled .alarm-switch i{transform:translateX(18px);background:#fffaf2}
+.alarm-connection-toggle b{font-size:12px;white-space:nowrap}
+.alarm-connection-toggle:disabled{opacity:.55;cursor:wait}
+@media (max-width:760px){.alarm-proposal-grid{grid-template-columns:1fr}.alarm-proposal-grid label:first-child{grid-column:auto}.alarm-item{grid-template-columns:1fr}.alarm-page-toolbar{align-items:stretch;flex-direction:column}.alarm-page-toolbar button,.alarm-item button{width:100%}}
 
 .goal-toggle{min-width:168px!important;justify-content:flex-start!important;gap:12px!important;border:0!important;background:transparent!important;color:#655b4f!important;padding:8px 10px!important}
 .goal-toggle:hover{color:#5d4025!important}

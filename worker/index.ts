@@ -33,13 +33,14 @@ const worker = {
     const url = new URL(request.url);
 
     if (url.pathname === "/download/android" && (request.method === "GET" || request.method === "HEAD")) {
-      const assetUrl = new URL("/downloads/daxiang-abao-alarm.apk", request.url);
+      const downloadName = "daxiang-abao-alarm-xiaomi12spro-v1.1.4.apk";
+      const assetUrl = new URL(`/downloads/${downloadName}`, request.url);
       const asset = await env.ASSETS.fetch(new Request(assetUrl, { method: "GET" }));
       if (!asset.ok || !asset.body) return new Response("Android 安装包暂时无法下载", { status: 503 });
 
       const headers = new Headers(asset.headers);
       headers.set("content-type", "application/vnd.android.package-archive");
-      headers.set("content-disposition", 'attachment; filename="daxiang-abao-alarm.apk"');
+      headers.set("content-disposition", `attachment; filename="${downloadName}"`);
       headers.set("cache-control", "public, max-age=3600");
       headers.set("x-content-type-options", "nosniff");
       return new Response(request.method === "HEAD" ? null : asset.body, { status: 200, headers });

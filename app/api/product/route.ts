@@ -36,6 +36,12 @@ function mappedMessage(row: typeof messages.$inferSelect) {
   return { ...row, sources: restoreStoredSources(row.sourcesJson), category: context.category ?? "生活建议", responseType: context.responseType ?? "recommendation", provider: context.provider ?? null, status: context.status ?? null };
 }
 
+async function idempotentGoalId(ownerUserId: string, idempotencyKey: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${ownerUserId}:${idempotencyKey}`));
+  const encoded = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `goal_${encoded.slice(0, 32)}`;
+}
+
 export async function GET(request: Request) {
   const identity = await apiIdentity(request);
   if (!identity) return unauthorized();
@@ -171,19 +177,48 @@ export async function POST(request: Request) {
     return Response.json({ id: goalId }, { status: 201 });
   }
 
+  if (action === "create_goal_with_reminder") {
+    const subjectId = String(body.subjectId ?? "");
+    if (!await ownedSubject(identity.userId, subjectId)) return Response.json({ error: "invalid_subject" }, { status: 403 });
+    const parsedGoal = parseGoalInput(body);
+    if (!parsedGoal.ok) return Response.json({ error: parsedGoal.error }, { status: 400 });
+    const hour = Number(body.hour);
+    const minute = Number(body.minute);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+      return Response.json({ error: "invalid_alarm_time" }, { status: 400 });
+    }
+    const idempotencyKey = String(body.idempotencyKey ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(idempotencyKey)) return Response.json({ error: "invalid_idempotency_key" }, { status: 400 });
+    const { type, title, plan } = parsedGoal.value;
+    const goalId = await idempotentGoalId(identity.userId, idempotencyKey);
+    const existing = (await database.select().from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];
+    if (existing) {
+      let reminder: Record<string, unknown> = {};
+      try { reminder = JSON.parse(existing.reminderJson || "{}"); } catch { reminder = {}; }
+      return Response.json({ goal: { id: existing.id, title: existing.title, type: existing.type }, reminder });
+    }
+    const requestedAt = now();
+    const reminder = { enabled: true, provider: "android_alarm_clock", hour, minute, source: "conversation_confirmation", timezone: "device_local", status: "pending_system_confirmation", requestedAt };
+    await database.batch([
+      database.insert(goals).values({ id: goalId, ownerUserId: identity.userId, subjectId, type, title, planJson: json(plan), reminderJson: json(reminder), status: "active", createdAt: requestedAt, updatedAt: requestedAt }),
+      database.insert(auditEvents).values({ id: id("audit"), ownerUserId: identity.userId, subjectId, action: "conversation_alarm_requested", resourceType: "goal", resourceId: goalId, metadataJson: json({ type, hour, minute, source: "conversation_confirmation" }), createdAt: requestedAt }),
+    ]);
+    return Response.json({ goal: { id: goalId, title, type }, reminder }, { status: 201 });
+  }
+
   if (action === "checkin") {
     const goalId = String(body.goalId ?? "");
     const goal = (await database.select().from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];
     if (!goal) return Response.json({ error: "not_found" }, { status: 404 });
     const checkinId = id("checkin");
-    await database.insert(goalCheckins).values({ id: checkinId, goalId, ownerUserId: identity.userId });
+    await database.insert(goalCheckins).values({ id: checkinId, goalId, ownerUserId: identity.userId, createdAt: now() });
     await audit(identity.userId, "habit_checked_in", "goal", goalId, goal.subjectId);
     return Response.json({ id: checkinId }, { status: 201 });
   }
 
   if (action === "update_goal_reminder") {
     const goalId = String(body.goalId ?? "");
-    const goal = (await database.select({ id: goals.id, subjectId: goals.subjectId }).from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];
+    const goal = (await database.select({ id: goals.id, subjectId: goals.subjectId, reminderJson: goals.reminderJson }).from(goals).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))).limit(1))[0];
     if (!goal) return Response.json({ error: "not_found" }, { status: 404 });
     const enabled = body.enabled === true;
     const hour = Number(body.hour);
@@ -191,9 +226,18 @@ export async function POST(request: Request) {
     if (enabled && (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59)) {
       return Response.json({ error: "invalid_alarm_time" }, { status: 400 });
     }
+    let previous: Record<string, unknown> = {};
+    try { previous = JSON.parse(goal.reminderJson || "{}"); } catch { previous = {}; }
+    const previousHour = Number(previous.hour);
+    const previousMinute = Number(previous.minute);
+    const retainedHour = Number.isInteger(previousHour) && previousHour >= 0 && previousHour <= 23 ? previousHour : hour;
+    const retainedMinute = Number.isInteger(previousMinute) && previousMinute >= 0 && previousMinute <= 59 ? previousMinute : minute;
+    if (!Number.isInteger(retainedHour) || retainedHour < 0 || retainedHour > 23 || !Number.isInteger(retainedMinute) || retainedMinute < 0 || retainedMinute > 59) {
+      return Response.json({ error: "invalid_alarm_time" }, { status: 400 });
+    }
     const reminder = enabled
-      ? { enabled: true, provider: "android_alarm_clock", hour, minute, source: "title", timezone: "device_local" }
-      : { enabled: false, provider: "android_alarm_clock" };
+      ? { enabled: true, provider: "android_alarm_clock", hour, minute, source: typeof previous.source === "string" ? previous.source : "title", timezone: "device_local", status: "pending_system_confirmation", requestedAt: now() }
+      : { enabled: false, provider: "android_alarm_clock", hour: retainedHour, minute: retainedMinute, source: typeof previous.source === "string" ? previous.source : "title", timezone: "device_local", status: "disabled", requestedAt: typeof previous.requestedAt === "string" ? previous.requestedAt : now() };
     await database.batch([
       database.update(goals).set({ reminderJson: json(reminder), updatedAt: now() }).where(and(eq(goals.id, goalId), eq(goals.ownerUserId, identity.userId))),
       database.insert(auditEvents).values({ id: id("audit"), ownerUserId: identity.userId, subjectId: goal.subjectId, action: enabled ? "android_alarm_requested" : "android_alarm_disabled", resourceType: "goal", resourceId: goalId, metadataJson: json(enabled ? { hour, minute, source: "title" } : {}) }),

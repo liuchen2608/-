@@ -4,6 +4,7 @@ import test from "node:test";
 
 test("habit check-in uses an accessible visual switch", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const bootstrap = await readFile(new URL("../app/api/bootstrap/route.ts", import.meta.url), "utf8");
 
   assert.match(page, /className=\{`goal-toggle/);
   assert.match(page, /role="switch"/);
@@ -14,4 +15,8 @@ test("habit check-in uses an accessible visual switch", async () => {
   assert.match(page, /action: "delete_goal"/);
   assert.match(page, /确定删除/);
   assert.match(page, /className="goal-delete"/);
+  assert.match(page, /isCheckinToday/);
+  assert.match(page, /checkins=\{bootstrap\?\.checkins \?\? \[\]\}/);
+  assert.match(bootstrap, /goalCheckins/);
+  assert.match(bootstrap, /checkins: checkinRows/);
 });

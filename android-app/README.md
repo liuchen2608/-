@@ -17,4 +17,4 @@
 ./gradlew :app:assembleDebug
 ```
 
-将输出的 APK 复制到网站的 `public/downloads/daxiang-abao-alarm.apk` 后再构建网站。
+当前发布文件使用英文版本名 `daxiang-abao-alarm-xiaomi12spro-v1.1.4.apk`，同时复制为网站内部稳定资源 `public/downloads/daxiang-abao-alarm.apk`。对外下载路由应返回版本化英文文件名，避免与手机里的旧下载同名后被浏览器保存成 `.apk.1`。

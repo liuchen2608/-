@@ -9,5 +9,6 @@ test("new conversation always resets the draft and acknowledges the click", asyn
   assert.match(page, /setNewConversationVersion\(\(current\) => current \+ 1\)/);
   assert.match(page, /key=\{`\$\{conversationId \|\| "new"\}:\$\{newConversationVersion\}`\}/);
   assert.match(page, /setNotice\("已开始新对话"\)/);
-  assert.match(page, /autoFocus=\{autoFocusComposer\}/);
+  assert.match(page, /if \(autoFocusComposer\) composerRef\.current\?\.focus\(\)/);
+  assert.match(page, /<textarea ref=\{composerRef\}/);
 });

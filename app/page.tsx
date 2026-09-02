@@ -1,26 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AI_CONVERSATION_NOTICE, AI_CONVERSATION_SCOPE, hasConversationConsent } from "./lib/ai-consent";
 import { getAdviceViewMode } from "./advice-view-state";
+import { getAlarmPlanConfirmation, type AlarmPlanProposal, type AlarmPlanType } from "./alarm-plan-intent";
 import { getHabitPlanConfirmation, type HabitPlanProposal } from "./habit-plan-intent";
 import { filterGoalsByType } from "./habit-goal-filter";
 import { buildAndroidAlarmIntent, parseAlarmTimeFromTitle, readAlarmEnabled } from "./alarm-reminder";
 
-type PageName = "生活建议" | "生活偏好" | "习惯计划";
+type PageName = "生活建议" | "生活偏好" | "习惯计划" | "我的闹钟";
 type IconName = "home" | "chat" | "sliders" | "target" | "history" | "privacy" | "menu" | "send" | "check" | "trash" | "alarm" | "chevron-left" | "chevron-right" | "close" | "arrow-right";
 type Subject = { id: string; profileJson?: string | null };
 type Consent = { subjectId: string; scope: string; status: string };
 type Goal = { id: string; type: string; title: string; reminderJson?: string | null };
+type GoalCheckin = { goalId: string; createdAt: string };
 type RagSource = { id: string; title: string; organization: string; url: string };
 type Message = { id?: string; role: "user" | "assistant"; content: string; category?: string; responseType?: string; provider?: string; status?: string; sources?: RagSource[] };
 type Conversation = { userMessage?: Message; assistantMessage?: Message; items?: Message[] };
-type BootstrapData = { subject?: Subject; consents?: Consent[]; goals?: Goal[] };
+type BootstrapData = { subject?: Subject; consents?: Consent[]; goals?: Goal[]; checkins?: GoalCheckin[] };
 type SetNotice = (message: string) => void;
 
 const nav: Array<{ label: PageName; icon: IconName }> = [
   { label: "生活偏好", icon: "sliders" },
   { label: "习惯计划", icon: "target" },
+  { label: "我的闹钟", icon: "alarm" },
 ];
 
 const prompts = [
@@ -58,6 +61,7 @@ export default function Home() {
   const [conversationId, setConversationId] = useState("");
   const [newConversationVersion, setNewConversationVersion] = useState(0);
   const [planProposal, setPlanProposal] = useState<HabitPlanProposal | null>(null);
+  const [alarmProposal, setAlarmProposal] = useState<AlarmPlanProposal | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -143,6 +147,37 @@ export default function Home() {
     setNotice("已添加到习惯计划");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const addProposedAlarm = async (input: { proposal: AlarmPlanProposal; connectSystemAlarm: boolean; idempotencyKey: string }) => {
+    const activeSubjectId = subjectId || (await fetchBootstrap()).subject?.id;
+    if (!activeSubjectId) throw new Error("profile_unavailable");
+    if (!input.connectSystemAlarm) {
+      await request({ action: "create_goal", subjectId: activeSubjectId, type: input.proposal.type, title: input.proposal.title });
+      await load();
+      setAlarmProposal(null);
+      setPage("习惯计划");
+      setNotice("已加入习惯计划，未请求系统闹钟");
+      return;
+    }
+    const result = await request<{ goal: Goal; reminder: { status?: string } }>({
+      action: "create_goal_with_reminder",
+      subjectId: activeSubjectId,
+      type: input.proposal.type,
+      title: input.proposal.title,
+      hour: input.proposal.hour,
+      minute: input.proposal.minute,
+      idempotencyKey: input.idempotencyKey,
+    });
+    await load();
+    setAlarmProposal(null);
+    setPage("我的闹钟");
+    if (!/Android/i.test(navigator.userAgent)) {
+      setNotice("已加入我的闹钟；请在 Android 手机中打开后提交到系统闹钟");
+      return;
+    }
+    const fallbackUrl = new URL("/download/android", window.location.origin).href;
+    setNotice("已提交到系统闹钟，请在系统页面确认保存");
+    window.location.assign(buildAndroidAlarmIntent({ operation: "set", goalId: result.goal.id, title: input.proposal.title, hour: input.proposal.hour, minute: input.proposal.minute, fallbackUrl }));
+  };
 
   return (
     <main className={`app-shell ${collapsed ? "is-collapsed" : ""}`}>
@@ -188,10 +223,11 @@ export default function Home() {
 
         <div className={`content ${page === "生活建议" ? "chat-content" : ""}`}>
           <section className="advice-panel" hidden={page !== "生活建议"}>
-            <AdvicePage key={`${conversationId || "new"}:${newConversationVersion}`} conversation={conversation} conversationId={conversationId} autoFocusComposer={!conversationId && newConversationVersion > 0} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} onPlanIntent={setPlanProposal} setNotice={setNotice} />
+            <AdvicePage key={`${conversationId || "new"}:${newConversationVersion}`} conversation={conversation} conversationId={conversationId} autoFocusComposer={!conversationId && newConversationVersion > 0} onStart={begin} onAuthorize={authorizeDialogue} onChange={(items) => setConversation({ items })} onPlanIntent={setPlanProposal} onAlarmIntent={setAlarmProposal} setNotice={setNotice} />
           </section>
           {page === "生活偏好" && <PreferencePage subject={bootstrap?.subject} reload={load} setNotice={setNotice} />}
-          {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
+          {page === "习惯计划" && <HabitPage subjectId={subjectId} goals={bootstrap?.goals ?? []} checkins={bootstrap?.checkins ?? []} reload={load} setNotice={setNotice} />}
+          {page === "我的闹钟" && <AlarmPage goals={bootstrap?.goals ?? []} reload={load} setNotice={setNotice} />}
         </div>
       </section>
 
@@ -199,16 +235,22 @@ export default function Home() {
       {privacy && <PrivacyModal close={() => setPrivacy(false)} subjectId={subjectId} reload={load} setNotice={setNotice} />}
       {history && <HistoryModal close={() => setHistory(false)} openConversation={openConversation} />}
       {planProposal && <HabitPlanConfirmModal proposal={planProposal} close={() => setPlanProposal(null)} confirm={addProposedPlan} />}
+      {alarmProposal && <AlarmPlanConfirmModal proposal={alarmProposal} close={() => setAlarmProposal(null)} confirm={addProposedAlarm} />}
     </main>
   );
 }
 
-function AdvicePage({ conversation, conversationId, autoFocusComposer, onStart, onAuthorize, onChange, onPlanIntent, setNotice }: { conversation: Conversation | null; conversationId: string; autoFocusComposer: boolean; onStart: (text: string) => Promise<Conversation>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; setNotice: SetNotice }) {
+function AdvicePage({ conversation, conversationId, autoFocusComposer, onStart, onAuthorize, onChange, onPlanIntent, onAlarmIntent, setNotice }: { conversation: Conversation | null; conversationId: string; autoFocusComposer: boolean; onStart: (text: string) => Promise<Conversation>; onAuthorize: () => Promise<void>; onChange: (items: Message[]) => void; onPlanIntent: (proposal: HabitPlanProposal) => void; onAlarmIntent: (proposal: AlarmPlanProposal) => void; setNotice: SetNotice }) {
   const [text, setText] = useState("");
   const [items, setItems] = useState<Message[]>(() => conversation?.items ?? [conversation?.userMessage, conversation?.assistantMessage].filter((item): item is Message => Boolean(item)));
   const [sending, setSending] = useState(false);
   const [pendingText, setPendingText] = useState("");
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const showWelcome = getAdviceViewMode(items.length, sending) === "welcome";
+
+  useEffect(() => {
+    if (autoFocusComposer) composerRef.current?.focus();
+  }, [autoFocusComposer]);
 
   const submit = async (value?: string) => {
     const content = (value ?? text).trim();
@@ -230,8 +272,12 @@ function AdvicePage({ conversation, conversationId, autoFocusComposer, onStart, 
         responseType = result.assistantMessage?.responseType;
       }
       setText("");
-      const proposal = getHabitPlanConfirmation(content, responseType);
-      if (proposal) onPlanIntent(proposal);
+      const alarm = getAlarmPlanConfirmation(content, responseType);
+      if (alarm) onAlarmIntent(alarm);
+      else {
+        const proposal = getHabitPlanConfirmation(content, responseType);
+        if (proposal) onPlanIntent(proposal);
+      }
     } catch {
       setText(content);
       setNotice("消息未能完成发送，输入已保留，请稍后重试或重新登录");
@@ -307,7 +353,7 @@ function AdvicePage({ conversation, conversationId, autoFocusComposer, onStart, 
       <div className="chat-dock">
         <div className="composer">
           <label htmlFor="advice-input">你想改善什么？</label>
-          <textarea id="advice-input" value={text} disabled={sending} autoFocus={autoFocusComposer} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+          <textarea ref={composerRef} id="advice-input" value={text} disabled={sending} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); submit(); }
           }} placeholder="例如：我晚上总是很晚睡，想调整作息" maxLength={2000} />
           <div><small>{text.length}/2000</small><button className="send-button" onClick={() => submit()} disabled={sending || !text.trim()} aria-label="发送问题"><Icon name="send" />{sending ? "生成中" : "发送"}</button></div>
@@ -363,12 +409,20 @@ function PreferencePage({ subject, reload, setNotice }: { subject?: Subject; rel
   </div>;
 }
 
-function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string; goals: Goal[]; reload: () => Promise<void>; setNotice: SetNotice }) {
+function isCheckinToday(createdAt: string) {
+  const normalized = createdAt.includes("T") ? createdAt : `${createdAt.replace(" ", "T")}Z`;
+  const date = new Date(normalized);
+  const today = new Date();
+  return !Number.isNaN(date.getTime()) && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+}
+
+function HabitPage({ subjectId, goals, checkins, reload, setNotice }: { subjectId: string; goals: Goal[]; checkins: GoalCheckin[]; reload: () => Promise<void>; setNotice: SetNotice }) {
   const [type, setType] = useState("作息");
   const [title, setTitle] = useState("");
-  const [completed, setCompleted] = useState<Set<string>>(() => new Set());
+  const [checkingIn, setCheckingIn] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState<Set<string>>(() => new Set());
   const [alarmBusy, setAlarmBusy] = useState<Set<string>>(() => new Set());
+  const completed = new Set(checkins.filter((item) => isCheckinToday(item.createdAt)).map((item) => item.goalId));
   const visibleGoals = filterGoalsByType(goals, type);
   const create = async () => {
     if (!subjectId || !title.trim()) return;
@@ -390,7 +444,6 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
         window.location.assign(buildAndroidAlarmIntent({ operation: "show", goalId: goal.id, title: goal.title, fallbackUrl: new URL("/download/android", window.location.origin).href }));
       }
       await deletion;
-      setCompleted((current) => { const next = new Set(current); next.delete(goal.id); return next; });
       await reload();
       if (!hadAlarm) setNotice("习惯计划已删除");
     } catch {
@@ -400,10 +453,6 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
   };
   const toggleAlarm = async (goal: Goal) => {
     if (alarmBusy.has(goal.id)) return;
-    if (!/Android/i.test(navigator.userAgent)) {
-      setNotice("请在 Android 手机中打开本页面后设置系统闹钟");
-      return;
-    }
     const alarmTime = parseAlarmTimeFromTitle(goal.title);
     if (!alarmTime) {
       setNotice("任务标题中没有识别到明确时间，请写成“晚上10点去散步”");
@@ -412,17 +461,19 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
     const enabled = readAlarmEnabled(goal.reminderJson);
     setAlarmBusy((current) => new Set(current).add(goal.id));
     try {
+      const isAndroid = /Android/i.test(navigator.userAgent);
       const fallbackUrl = new URL("/download/android", window.location.origin).href;
-      const update = request({ action: "update_goal_reminder", goalId: goal.id, enabled: !enabled, hour: alarmTime.hour, minute: alarmTime.minute });
-      if (enabled) {
+      await request({ action: "update_goal_reminder", goalId: goal.id, enabled: !enabled, hour: alarmTime.hour, minute: alarmTime.minute });
+      await reload();
+      if (!isAndroid) {
+        setNotice(enabled ? "已断开网页中的闹钟连接；手机系统中已有闹钟需在 Android 手机手动删除" : "已保存闹钟请求；请在 Android 手机中打开后提交到系统闹钟");
+      } else if (enabled) {
         setNotice("正在打开系统闹钟，请确认删除对应闹钟");
         window.location.assign(buildAndroidAlarmIntent({ operation: "show", goalId: goal.id, title: goal.title, fallbackUrl }));
       } else {
         setNotice(`已识别 ${alarmTime.display}，请在系统闹钟页面确认保存`);
         window.location.assign(buildAndroidAlarmIntent({ operation: "set", goalId: goal.id, title: goal.title, hour: alarmTime.hour, minute: alarmTime.minute, fallbackUrl }));
       }
-      await update;
-      await reload();
     } catch {
       setNotice("手机闹钟暂时无法连接");
     } finally {
@@ -437,7 +488,7 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
       <button className="primary-button" onClick={create} disabled={!title.trim()}>创建计划</button>
     </section>
     {visibleGoals.length ? <div className="goal-list">{visibleGoals.map((goal) => {
-      const isComplete = completed.has(goal.id);
+      const isComplete = completed.has(goal.id) || checkingIn.has(goal.id);
       const alarmTime = parseAlarmTimeFromTitle(goal.title);
       const alarmEnabled = readAlarmEnabled(goal.reminderJson);
       return <article className="goal-card" key={goal.id}>
@@ -445,15 +496,91 @@ function HabitPage({ subjectId, goals, reload, setNotice }: { subjectId: string;
       <div className="goal-card-actions"><button className={`alarm-toggle ${alarmEnabled ? "is-enabled" : ""}`} role="switch" aria-checked={alarmEnabled} aria-label={`${goal.title}：${alarmEnabled ? "关闭手机闹钟" : "连接手机闹钟"}`} disabled={alarmBusy.has(goal.id) || !alarmTime} onClick={() => toggleAlarm(goal)} title={alarmTime ? `自动识别时间 ${alarmTime.display}` : "任务标题中没有可识别的时间"}>
         <Icon name="alarm" /><span className="alarm-switch" aria-hidden="true"><i /></span><b>{alarmBusy.has(goal.id) ? "连接中" : alarmTime ? `${alarmTime.display} 闹钟` : "未识别时间"}</b>
       </button><button className={`goal-toggle ${isComplete ? "is-complete" : ""}`} role="switch" aria-checked={isComplete} aria-label={`${goal.title}：${isComplete ? "今日已完成" : "今日未完成"}`} disabled={isComplete} onClick={async () => {
+        setCheckingIn((current) => new Set(current).add(goal.id));
         try {
           await request({ action: "checkin", goalId: goal.id });
-          setCompleted((current) => new Set(current).add(goal.id));
+          await reload();
           setNotice("今天的行动已记录");
         } catch { setNotice("今天的行动暂时无法记录"); }
+        finally { setCheckingIn((current) => { const next = new Set(current); next.delete(goal.id); return next; }); }
       }}><span className="goal-switch" aria-hidden="true"><i /></span><b>{isComplete ? "今日已完成" : "今日未完成"}</b></button>
       <button className="goal-delete" onClick={() => remove(goal)} disabled={deleting.has(goal.id)}><Icon name="trash" />{deleting.has(goal.id) ? "删除中" : "删除"}</button></div>
     </article>;
     })}</div> : <section className="empty-card"><Icon name="target" /><h2>{type === "日常习惯" ? "还没有习惯计划" : `还没有${type}计划`}</h2><p>从一项十分钟内可以完成的小行动开始。</p></section>}
+  </div>;
+}
+
+type AlarmReminderDetails = { enabled: boolean; hour: number; minute: number; status: string };
+
+function readAlarmReminderDetails(reminderJson?: string | null): AlarmReminderDetails | null {
+  try {
+    const reminder = JSON.parse(reminderJson ?? "{}") as { enabled?: unknown; provider?: unknown; hour?: unknown; minute?: unknown; status?: unknown };
+    if (typeof reminder.enabled !== "boolean" || reminder.provider !== "android_alarm_clock") return null;
+    const hour = Number(reminder.hour);
+    const minute = Number(reminder.minute);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    return { enabled: reminder.enabled, hour, minute, status: typeof reminder.status === "string" ? reminder.status : reminder.enabled ? "pending_system_confirmation" : "disabled" };
+  } catch {
+    return null;
+  }
+}
+
+function AlarmPage({ goals, reload, setNotice }: { goals: Goal[]; reload: () => Promise<void>; setNotice: SetNotice }) {
+  const [busy, setBusy] = useState<Set<string>>(() => new Set());
+  const alarmGoals = goals.filter((goal) => readAlarmReminderDetails(goal.reminderJson));
+  const toggleConnection = async (goal: Goal) => {
+    const reminder = readAlarmReminderDetails(goal.reminderJson);
+    if (!reminder || busy.has(goal.id)) {
+      setNotice("这条任务缺少有效闹钟时间，请返回习惯计划重新连接");
+      return;
+    }
+    const fallbackUrl = new URL("/download/android", window.location.origin).href;
+    const nextEnabled = !reminder.enabled;
+    setBusy((current) => new Set(current).add(goal.id));
+    try {
+      await request({ action: "update_goal_reminder", goalId: goal.id, enabled: nextEnabled, hour: reminder.hour, minute: reminder.minute });
+      await reload();
+      if (!/Android/i.test(navigator.userAgent)) {
+        setNotice(nextEnabled ? "已更新网页中的闹钟连接状态；请在 Android 手机中打开后提交到系统闹钟" : "已更新网页中的闹钟连接状态；手机系统中已有闹钟需在 Android 手机手动删除");
+      } else if (nextEnabled) {
+        setNotice("已提交到系统闹钟，请在系统页面确认保存");
+        window.location.assign(buildAndroidAlarmIntent({ operation: "set", goalId: goal.id, title: goal.title, hour: reminder.hour, minute: reminder.minute, fallbackUrl }));
+      } else {
+        setNotice("正在打开系统闹钟，请确认删除对应闹钟");
+        window.location.assign(buildAndroidAlarmIntent({ operation: "show", goalId: goal.id, title: goal.title, fallbackUrl }));
+      }
+    } catch {
+      setNotice("手机闹钟连接状态暂时无法更新");
+    } finally {
+      setBusy((current) => { const next = new Set(current); next.delete(goal.id); return next; });
+    }
+  };
+  const showSystemAlarms = () => {
+    if (!/Android/i.test(navigator.userAgent)) {
+      setNotice("请在 Android 手机中打开本页面后查看系统闹钟");
+      return;
+    }
+    const fallbackUrl = new URL("/download/android", window.location.origin).href;
+    window.location.assign(buildAndroidAlarmIntent({ operation: "show", goalId: "all", title: "我的闹钟", fallbackUrl }));
+  };
+  return <div className="page alarm-page">
+    <PageHeader kicker="由你确认后再连接手机" title="我的闹钟" description="这里展示已经保存的提醒请求。系统是否真正保存和响铃，以 Android 系统闹钟页面为准。" />
+    <section className="alarm-page-toolbar">
+      <span><Icon name="alarm" /><b>{alarmGoals.length} 个提醒任务</b></span>
+      <button className="secondary-button" onClick={showSystemAlarms}>查看系统闹钟列表</button>
+    </section>
+    {alarmGoals.length ? <div className="alarm-list">{alarmGoals.map((goal) => {
+      const reminder = readAlarmReminderDetails(goal.reminderJson);
+      if (!reminder) return null;
+      const time = `${String(reminder.hour).padStart(2, "0")}:${String(reminder.minute).padStart(2, "0")}`;
+      return <article className="alarm-item" key={goal.id}>
+        <div className="alarm-time"><Icon name="alarm" /><strong>{time}</strong></div>
+        <div><span>{goal.type}</span><h2>{goal.title}</h2><p>{reminder.enabled ? reminder.status === "pending_system_confirmation" ? "待系统确认" : "已请求系统闹钟" : "已断开手机闹钟"} · 到点响铃由手机系统时钟负责。</p></div>
+        <button className={`alarm-connection-toggle ${reminder.enabled ? "is-enabled" : ""}`} role="switch" aria-checked={reminder.enabled} aria-label={`${goal.title}：${reminder.enabled ? "断开手机闹钟" : "连接手机闹钟"}`} disabled={busy.has(goal.id)} onClick={() => toggleConnection(goal)}>
+          <span className="alarm-switch" aria-hidden="true"><i /></span><b>{busy.has(goal.id) ? "处理中" : reminder.enabled ? "已连接" : "未连接"}</b>
+        </button>
+      </article>;
+    })}</div> : <section className="empty-card"><Icon name="alarm" /><h2>还没有闹钟任务</h2><p>你可以在对话中说“晚上9点提醒我喝水”，确认后会出现在这里。</p></section>}
   </div>;
 }
 
@@ -493,6 +620,53 @@ function HabitPlanConfirmModal({ proposal, close, confirm }: { proposal: HabitPl
     <div className="modal-actions plan-confirm-actions">
       <button className="secondary-button" onClick={close} disabled={saving}>取消</button>
       <button className="primary-button" onClick={submit} disabled={saving || !title.trim()}>{saving ? "添加中" : "确认添加"}</button>
+    </div>
+  </section></div>;
+}
+
+function AlarmPlanConfirmModal({ proposal, close, confirm }: { proposal: AlarmPlanProposal; close: () => void; confirm: (input: { proposal: AlarmPlanProposal; connectSystemAlarm: boolean; idempotencyKey: string }) => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [title, setTitle] = useState(proposal.title);
+  const [type, setType] = useState<AlarmPlanType>(proposal.type);
+  const [time, setTime] = useState(proposal.displayTime);
+  const [connectSystemAlarm, setConnectSystemAlarm] = useState(true);
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const submit = async () => {
+    const trimmedTitle = title.trim();
+    const match = time.match(/^(\d{2}):(\d{2})$/);
+    if (saving || !trimmedTitle || !match) return;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    setSaving(true);
+    setError("");
+    try {
+      await confirm({ proposal: { ...proposal, title: trimmedTitle, type, hour, minute, displayTime: time }, connectSystemAlarm, idempotencyKey });
+    } catch {
+      setError("闹钟任务暂时无法添加，内容已保留，请稍后重试");
+      setSaving(false);
+    }
+  };
+
+  return <div className="overlay"><section className="modal alarm-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="alarm-confirm-title">
+    <button className="close-button" onClick={close} disabled={saving} aria-label="关闭"><Icon name="close" /></button>
+    <span className="modal-kicker">我的闹钟</span>
+    <h2 id="alarm-confirm-title">添加到我的闹钟？</h2>
+    <p>请确认任务与时间。取消不会保存，也不会打开系统闹钟。</p>
+    <div className="alarm-proposal-grid">
+      <label><span>任务标题</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={saving} maxLength={80} placeholder="例如：晚上9点喝水" /></label>
+      <label><span>计划分类</span><select value={type} onChange={(event) => setType(event.target.value as AlarmPlanType)} disabled={saving}>{["作息", "饮食", "运动", "日常习惯"].map((item) => <option key={item}>{item}</option>)}</select></label>
+      <label><span>闹钟时间</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} disabled={saving} required /></label>
+    </div>
+    <button type="button" className={`system-alarm-permission ${connectSystemAlarm ? "is-enabled" : ""}`} role="switch" aria-checked={connectSystemAlarm} onClick={() => setConnectSystemAlarm((current) => !current)} disabled={saving}>
+      <span><Icon name="alarm" /><b>同时设置系统闹钟</b><small>{connectSystemAlarm ? "确认后将打开 Android 系统闹钟页面，请完成最终保存" : "关闭后只会加入习惯计划"}</small></span>
+      <i className="alarm-switch" aria-hidden="true"><i /></i>
+    </button>
+    <p className="alarm-system-note">大象阿宝只能提交闹钟请求，无法读取系统是否保存；到点响铃由手机系统时钟负责。</p>
+    {error && <p className="plan-confirm-error" role="alert">{error}</p>}
+    <div className="modal-actions plan-confirm-actions">
+      <button className="secondary-button" onClick={close} disabled={saving}>取消</button>
+      <button className="primary-button" onClick={submit} disabled={saving || !title.trim() || !time}>{saving ? "添加中" : connectSystemAlarm ? "确认并打开系统闹钟" : "仅加入习惯计划"}</button>
     </div>
   </section></div>;
 }

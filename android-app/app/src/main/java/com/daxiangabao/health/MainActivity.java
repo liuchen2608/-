@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.AlarmClock;
 import android.view.Gravity;
@@ -15,6 +16,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
+import android.webkit.CookieManager;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -32,6 +39,7 @@ public final class MainActivity extends Activity {
     private static final int BROWN = Color.rgb(131, 91, 47);
     private static final int GREEN = Color.rgb(49, 112, 86);
     private static final int LINE = Color.rgb(211, 199, 181);
+    private WebView websiteView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +89,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showHome() {
+        releaseWebsiteView();
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(PAPER);
@@ -143,7 +152,7 @@ public final class MainActivity extends Activity {
         card.addView(body);
 
         Button openHome = button("进入大象阿宝主页  →", BROWN, Color.WHITE);
-        openHome.setOnClickListener(view -> openWebsite());
+        openHome.setOnClickListener(view -> showWebsiteInApp());
         card.addView(openHome, matchHeight(dp(52)));
         return card;
     }
@@ -223,12 +232,168 @@ public final class MainActivity extends Activity {
         openClock(alarm, "手机中没有可处理闹钟的应用");
     }
 
-    private void openWebsite() {
+    private void showWebsiteInApp() {
+        LinearLayout shell = column();
+        shell.setBackgroundColor(PAPER);
+
+        LinearLayout toolbar = new LinearLayout(this);
+        toolbar.setOrientation(LinearLayout.HORIZONTAL);
+        toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        toolbar.setPadding(dp(10), dp(8), dp(10), dp(8));
+        toolbar.setBackgroundColor(CARD);
+
+        Button back = button("‹", Color.TRANSPARENT, INK);
+        back.setTextSize(28);
+        back.setOnClickListener(view -> showHome());
+        toolbar.addView(back, new LinearLayout.LayoutParams(dp(50), dp(48)));
+
+        TextView title = text("大象阿宝", 18, INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        title.setPadding(dp(8), 0, dp(8), 0);
+        toolbar.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+
+        Button refresh = button("刷新", Color.TRANSPARENT, BROWN);
+        refresh.setTextSize(13);
+        refresh.setOnClickListener(view -> {
+            if (websiteView != null) websiteView.reload();
+        });
+        toolbar.addView(refresh, new LinearLayout.LayoutParams(dp(68), dp(48)));
+        shell.addView(toolbar, matchWrap());
+
+        websiteView = new WebView(this);
+        websiteView.setBackgroundColor(PAPER);
+        WebSettings settings = websiteView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.setSafeBrowsingEnabled(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(websiteView, true);
+        websiteView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return handleWebsiteNavigation(request.getUrl().toString());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleWebsiteNavigation(url);
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                super.onReceivedHttpError(view, request, errorResponse);
+                if (request.isForMainFrame() && errorResponse.getStatusCode() == 403) {
+                    view.stopLoading();
+                    view.post(() -> showWebsiteBlocked());
+                }
+            }
+        });
+        shell.addView(websiteView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        setContentView(shell);
+        websiteView.loadUrl(HOME_URL);
+    }
+
+    private void showWebsiteBlocked() {
+        releaseWebsiteView();
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(PAPER);
+
+        LinearLayout root = column();
+        root.setPadding(dp(22), dp(24), dp(22), dp(36));
+        root.addView(brand());
+        root.addView(space(22));
+
+        LinearLayout card = card();
+        TextView eyebrow = text("连接提示", 13, BROWN, Typeface.BOLD);
+        eyebrow.setLetterSpacing(0.06f);
+        card.addView(eyebrow);
+
+        TextView title = text("网页安全验证未通过", 28, INK, Typeface.BOLD);
+        title.setPadding(0, dp(12), 0, 0);
+        card.addView(title);
+
+        TextView body = text("线上安全服务拒绝了应用内页面请求。你的闹钟和手机主页仍可继续使用；可以稍后重试，或由你主动选择系统浏览器打开完整网页。", 16, MUTED, Typeface.NORMAL);
+        body.setLineSpacing(dp(5), 1f);
+        body.setPadding(0, dp(12), 0, dp(22));
+        card.addView(body);
+
+        Button retry = button("重新尝试", GREEN, Color.WHITE);
+        retry.setOnClickListener(view -> showWebsiteInApp());
+        card.addView(retry, matchHeight(dp(52)));
+
+        Button browser = button("使用系统浏览器打开", Color.TRANSPARENT, BROWN);
+        browser.setBackground(stroke(Color.TRANSPARENT, LINE, 14));
+        LinearLayout.LayoutParams browserParams = matchHeight(dp(50));
+        browserParams.topMargin = dp(10);
+        browser.setLayoutParams(browserParams);
+        browser.setOnClickListener(view -> openWebsiteInBrowser());
+        card.addView(browser);
+
+        Button home = button("返回手机主页", Color.TRANSPARENT, MUTED);
+        LinearLayout.LayoutParams homeParams = matchHeight(dp(48));
+        homeParams.topMargin = dp(6);
+        home.setLayoutParams(homeParams);
+        home.setOnClickListener(view -> showHome());
+        card.addView(home);
+
+        root.addView(card);
+        scroll.addView(root, matchWrap());
+        setContentView(scroll);
+    }
+
+    private void openWebsiteInBrowser() {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(HOME_URL)));
         } catch (ActivityNotFoundException error) {
-            showError("手机中没有可打开网页的浏览器。");
+            Toast.makeText(this, "手机中没有可打开网页的浏览器", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private boolean handleWebsiteNavigation(String target) {
+        try {
+            if (target.startsWith("intent://")) {
+                Intent parsed = Intent.parseUri(target, Intent.URI_INTENT_SCHEME);
+                Uri link = parsed.getData();
+                if (link != null && "daxiangabao".equals(link.getScheme())) handleAlarmLink(link);
+                else Toast.makeText(this, "不支持打开这个外部链接", Toast.LENGTH_LONG).show();
+                return true;
+            }
+            Uri link = Uri.parse(target);
+            if ("daxiangabao".equals(link.getScheme())) {
+                handleAlarmLink(link);
+                return true;
+            }
+            return !("http".equals(link.getScheme()) || "https".equals(link.getScheme()));
+        } catch (Exception error) {
+            Toast.makeText(this, "这个页面暂时无法打开", Toast.LENGTH_LONG).show();
+            return true;
+        }
+    }
+
+    private void releaseWebsiteView() {
+        if (websiteView == null) return;
+        websiteView.stopLoading();
+        websiteView.destroy();
+        websiteView = null;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (websiteView != null && websiteView.canGoBack()) {
+            websiteView.goBack();
+            return;
+        }
+        if (websiteView != null) {
+            showHome();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private void openClock(Intent intent, String errorMessage) {
